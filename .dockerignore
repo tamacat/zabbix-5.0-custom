@@ -1,0 +1,22 @@
+# Build context is the repository root (see compose.yml `build.context: .`). Keep the context —
+# and, more importantly, what actually gets COPYed into the web image — free of test-only tooling,
+# VCS metadata, and this project's own AI-DLC workflow records.
+
+.git
+.gitignore
+
+# AI-DLC workflow records — never belong in a shipped container image.
+aidlc/
+.claude/
+
+# Test-only PHP tooling [team-practices.md #Testing Posture]: the production web image (docker/web/
+# Dockerfile) must not install Composer/PHPUnit or ship the test suite.
+sources/zabbix-5.0.47/ui/tests/
+sources/zabbix-5.0.47/ui/composer.json
+sources/zabbix-5.0.47/ui/composer.lock
+sources/zabbix-5.0.47/ui/vendor/
+sources/zabbix-5.0.47/ui/phpunit.xml.dist
+sources/zabbix-5.0.47/ui/.phpunit.cache/
+
+# Local environment/secrets.
+.env

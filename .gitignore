@@ -1,0 +1,29 @@
+# Zabbix 5.0 PHP8 migration — build/runtime artifacts.
+# .env carries real DB credentials for compose.yml and must never be committed;
+# the rest are local PHPUnit/Composer artifacts (ui/composer.json itself IS
+# committed — only its resolved output is not).
+.env
+sources/zabbix-5.0.47/ui/vendor/
+sources/zabbix-5.0.47/ui/composer.lock
+sources/zabbix-5.0.47/ui/.phpunit.cache/
+
+# scripts/build-images.sh writes the exact tags it produced here so
+# scripts/push-images.sh pushes precisely those (never recomputed, so a
+# push run on a different day than the build can't drift to a new date tag).
+# Machine-local / run-local, not shared truth.
+scripts/.last-image-tag
+
+# Logs
+logs
+*.log
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

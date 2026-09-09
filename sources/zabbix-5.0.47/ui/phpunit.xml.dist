@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Test-only PHPUnit configuration for the Zabbix 5.0.47 ui/ PHP8 compatibility migration.
+
+	Scope is intentionally limited to ui/tests/ (see team-practices.md #Testing Posture): this project does not
+	introduce a repository-wide coverage floor, so <source><include> below lists only the four files this
+	migration actually changed (diff-only coverage), not the whole ui/ tree.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.0/phpunit.xsd"
+		 bootstrap="tests/bootstrap.php"
+		 colors="true"
+		 cacheDirectory=".phpunit.cache"
+		 beStrictAboutOutputDuringTests="true">
+	<testsuites>
+		<testsuite name="unit">
+			<directory>tests/unit</directory>
+		</testsuite>
+		<testsuite name="integration">
+			<directory>tests/integration</directory>
+		</testsuite>
+	</testsuites>
+
+	<source>
+		<include>
+			<file>include/classes/screens/CScreenProblem.php</file>
+			<file>include/triggers.inc.php</file>
+			<file>include/classes/setup/CFrontendSetup.php</file>
+			<file>app/controllers/CControllerAuthenticationEdit.php</file>
+			<file>app/controllers/CControllerAuthenticationUpdate.php</file>
+		</include>
+	</source>
+</phpunit>

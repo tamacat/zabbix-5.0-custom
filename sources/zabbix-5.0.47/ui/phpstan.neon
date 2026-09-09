@@ -1,0 +1,15 @@
+parameters:
+	level: 2
+	bootstrapFiles:
+		- phpstan-bootstrap.php
+	scanDirectories:
+		- include
+		- app
+		- local
+	paths:
+		- include
+		- app
+		- local
+	excludePaths:
+		- tests/*
+	reportUnmatchedIgnoredErrors: false
