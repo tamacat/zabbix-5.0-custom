@@ -71,7 +71,7 @@ class CPageHeader {
 	public function __construct(string $title, string $lang) {
 		$this->title = $title;
 		$this->lang = $lang;
-		$this->sid = substr(get_cookie(ZBX_SESSION_NAME), 16, 16);
+		$this->sid = substr(get_cookie(ZBX_SESSION_NAME, ''), 16, 16);
 	}
 
 	/**

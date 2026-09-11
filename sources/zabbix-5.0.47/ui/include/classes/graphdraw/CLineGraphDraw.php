@@ -775,7 +775,6 @@ class CLineGraphDraw extends CGraphDraw {
 					$this->shiftXleft + $this->shiftXCaption + 3, $this->shiftY - 5,
 					$this->shiftXleft + $this->shiftXCaption, $this->shiftY - 10
 				],
-				3,
 				$this->getColor('White')
 			);
 
@@ -818,7 +817,6 @@ class CLineGraphDraw extends CGraphDraw {
 					$this->sizeX + $this->shiftXleft + $this->shiftXCaption + 3, $this->shiftY - 5,
 					$this->sizeX + $this->shiftXleft + $this->shiftXCaption, $this->shiftY - 10
 				],
-				3,
 				$this->getColor('White')
 			);
 
@@ -860,7 +858,6 @@ class CLineGraphDraw extends CGraphDraw {
 				$this->sizeX + $this->shiftXleft + $this->shiftXCaption + 5, $this->sizeY + $this->shiftY + 4,
 				$this->sizeX + $this->shiftXleft + $this->shiftXCaption + 10, $this->sizeY + $this->shiftY + 1
 			],
-			3,
 			$this->getColor('White')
 		);
 
@@ -1582,7 +1579,6 @@ class CLineGraphDraw extends CGraphDraw {
 							$leftXShift - 5, $this->sizeY + $this->shiftY + 14 * $rowNum + self::LEGEND_OFFSET_Y,
 							$leftXShift, $this->sizeY + $this->shiftY + 14 * $rowNum + self::LEGEND_OFFSET_Y - 10
 						],
-						3,
 						$this->getColor($color)
 					);
 
@@ -1593,7 +1589,6 @@ class CLineGraphDraw extends CGraphDraw {
 							$leftXShift - 5, $this->sizeY + $this->shiftY + 14 * $rowNum + self::LEGEND_OFFSET_Y,
 							$leftXShift, $this->sizeY + $this->shiftY + 14 * $rowNum + self::LEGEND_OFFSET_Y - 10
 						],
-						3,
 						$this->getColor('Black No Alpha')
 					);
 					$rowNum++;
@@ -1797,7 +1792,7 @@ class CLineGraphDraw extends CGraphDraw {
 				$style = $drawtype == GRAPH_ITEM_DRAWTYPE_BOLD_LINE ? LINE_TYPE_BOLD : LINE_TYPE_NORMAL;
 
 				if ($calc_fnc == CALC_FNC_ALL) {
-					imagefilledpolygon($this->im, $a, 4, $minmax_color);
+					imagefilledpolygon($this->im, $a, $minmax_color);
 					if (!$y1x || !$y2x) {
 						zbx_imagealine($this->im, $x1, $y1max, $x2, $y2max, $max_color, $style);
 					}
@@ -1847,11 +1842,11 @@ class CLineGraphDraw extends CGraphDraw {
 					$a[6] = $x2;
 					$a[7] = $y2;
 
-					imagefilledpolygon($this->im, $a, 4, $avg_color);
+					imagefilledpolygon($this->im, $a, $avg_color);
 				}
 				else {
-					imageLine($this->im, $x1, $y1, $x2, $y2, $avg_color); // draw the initial line
-					imageLine($this->im, $x1, $y1 - 1, $x2, $y2 - 1, $avg_color);
+					zbx_imageline($this->im, $x1, $y1, $x2, $y2, $avg_color); // draw the initial line
+					zbx_imageline($this->im, $x1, $y1 - 1, $x2, $y2 - 1, $avg_color);
 
 					$bitmask = 255;
 					$blue = $avg_color & $bitmask;
@@ -1887,8 +1882,8 @@ class CLineGraphDraw extends CGraphDraw {
 								$alpha = 127 - abs(127 - ($alphaRatio * ($gy + $j - $this->shiftY - $startAlpha)));
 							}
 
-							$color = imagecolorexactalpha($this->im, $red, $green, $blue, $alpha);
-							imagesetpixel($this->im, $x2 + $i, $gy + $j, $color);
+							$color = imagecolorexactalpha($this->im, $red, $green, $blue, (int) $alpha);
+							imagesetpixel($this->im, (int) ($x2 + $i), (int) ($gy + $j), $color);
 						}
 					}
 				}

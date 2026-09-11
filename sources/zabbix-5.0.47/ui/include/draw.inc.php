@@ -34,7 +34,7 @@ function zbx_colormix($image, $bgColor, $fgColor, $alpha) {
 	$g = $bgColor[1] + ($fgColor[1] - $bgColor[1]) * $alpha;
 	$b = $bgColor[2] + ($fgColor[2] - $bgColor[2]) * $alpha;
 
-	return imagecolorresolvealpha($image, $r, $g, $b, 0);
+	return imagecolorresolvealpha($image, (int) $r, (int) $g, (int) $b, 0);
 }
 
 /**
