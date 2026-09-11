@@ -42,7 +42,7 @@ class CSvgGraphHelper {
 	 *
 	 * @return array
 	 */
-	public static function get(array $options = [], $width, $height) {
+	public static function get(array $options = [], $width = null, $height = null) {
 		$metrics = [];
 		$errors = [];
 
@@ -274,7 +274,7 @@ class CSvgGraphHelper {
 	/**
 	 * Select data to show in graph for each metric.
 	 */
-	protected static function getMetricsData(array &$metrics = [], $width) {
+	protected static function getMetricsData(array &$metrics = [], $width = null) {
 		// To reduce number of requests, group metrics by time range.
 		$tr_groups = [];
 		foreach ($metrics as $metric_num => &$metric) {
@@ -333,7 +333,8 @@ class CSvgGraphHelper {
 	/**
 	 * Calculate what data source must be used for each metric.
 	 */
-	protected static function getGraphDataSource(array &$metrics = [], array &$errors = [], $data_source, $width) {
+	protected static function getGraphDataSource(array &$metrics = [], array &$errors = [], $data_source = null,
+			$width = null) {
 		/**
 		 * If data source is not specified, calculate it automatically. Otherwise, set given $data_source to each
 		 * $metric.
@@ -701,7 +702,7 @@ class CSvgGraphHelper {
 	/**
 	 * Apply time period for each metric.
 	 */
-	protected static function getTimePeriods(array &$metrics = [], array $options) {
+	protected static function getTimePeriods(array &$metrics = [], array $options = []) {
 		foreach ($metrics as &$metric) {
 			$metric['time_period'] = $options;
 

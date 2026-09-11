@@ -63,8 +63,8 @@ class CConfigurationImport {
 	 * @param CImportReferencer			$referencer					class containing all importable objects
 	 * @param CImportedObjectContainer	$importedObjectContainer	class containing processed host and template IDs
 	 */
-	public function __construct(array $options = [], CImportReferencer $referencer,
-			CImportedObjectContainer $importedObjectContainer) {
+	public function __construct(array $options = [], CImportReferencer $referencer = null,
+			CImportedObjectContainer $importedObjectContainer = null) {
 		$default_options = [
 			'groups' => ['createMissing' => false],
 			'hosts' => ['updateExisting' => false, 'createMissing' => false],
