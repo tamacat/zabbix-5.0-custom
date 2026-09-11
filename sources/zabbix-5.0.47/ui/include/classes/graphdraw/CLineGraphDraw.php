@@ -1316,8 +1316,8 @@ class CLineGraphDraw extends CGraphDraw {
 		while ($start < $max_time && $start > 0) {
 			$end = find_period_end($periods, $start, $max_time);
 
-			$x1 = round((($start - $from) * $this->sizeX) / $this->period) + $this->shiftXleft;
-			$x2 = ceil((($end - $from) * $this->sizeX) / $this->period) + $this->shiftXleft;
+			$x1 = (int) round((($start - $from) * $this->sizeX) / $this->period) + $this->shiftXleft;
+			$x2 = (int) ceil((($end - $from) * $this->sizeX) / $this->period) + $this->shiftXleft;
 
 			// draw rectangle
 			imagefilledrectangle(

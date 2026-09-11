@@ -50,7 +50,7 @@ function zbx_colormix($image, $bgColor, $fgColor, $alpha) {
  * @param int       $color  line color
  */
 function zbx_imageline($image, $x1, $y1, $x2, $y2, $color) {
-		imageline($image, round($x1), round($y1), round($x2), round($y2), $color);
+		imageline($image, (int) round($x1), (int) round($y1), (int) round($x2), (int) round($y2), $color);
 }
 
 /**
@@ -65,10 +65,10 @@ function zbx_imageline($image, $x1, $y1, $x2, $y2, $color) {
  * @param int       $style  line style, one of LINE_TYPE_NORMAL (default), LINE_TYPE_BOLD (bold line)
  */
 function zbx_imagealine($image, $x1, $y1, $x2, $y2, $color, $style = LINE_TYPE_NORMAL) {
-	$x1 = round($x1);
-	$y1 = round($y1);
-	$x2 = round($x2);
-	$y2 = round($y2);
+	$x1 = (int) round($x1);
+	$y1 = (int) round($y1);
+	$x2 = (int) round($x2);
+	$y2 = (int) round($y2);
 
 	if ($x1 == $x2 && $y1 == $y2) {
 		imagesetpixel($image, $x1, $y1, $color);
@@ -88,7 +88,7 @@ function zbx_imagealine($image, $x1, $y1, $x2, $y2, $color, $style = LINE_TYPE_N
 			$y1 = $y2;
 		}
 		for ($x = $x1, $y = $y1; $x <= $x2; $x++, $y = $y1 + ($x - $x1) * $dy / $dx) {
-			$yint = floor($y);
+			$yint = (int) floor($y);
 			$yfrac = $y - $yint;
 
 			if (LINE_TYPE_BOLD == $style) {
@@ -120,7 +120,7 @@ function zbx_imagealine($image, $x1, $y1, $x2, $y2, $color, $style = LINE_TYPE_N
 		}
 		for ($y = $y1, $x = $x1; $y <= $y2; $y++, $x = $x1 + ($y - $y1) * $dx / $dy)
 		{
-			$xint = floor($x);
+			$xint = (int) floor($x);
 			$xfrac = $x - $xint;
 
 			if (LINE_TYPE_BOLD == $style) {
