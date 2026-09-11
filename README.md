@@ -17,6 +17,9 @@ podman compose up -d
 
 Open http://localhost:8080/ (default `ZABBIX_WEB_PORT`).
 
+See [MIGRATION.md](MIGRATION.md) for the full list of PHP 7 → PHP 8 compatibility
+fixes applied to the Zabbix source, with root causes and verification notes.
+
 No existing MySQL to test against? Start the bundled throwaway dev database
 instead:
 
