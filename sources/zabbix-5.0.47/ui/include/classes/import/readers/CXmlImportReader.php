@@ -35,8 +35,9 @@ class CXmlImportReader extends CImportReader {
 			throw new Exception(_s('Cannot read XML: %1$s.', _('XML is empty')));
 		}
 
+		// libxml_disable_entity_loader() was removed here: deprecated since PHP 8.0 and a no-op — the
+		// libxml2 version bundled with this build already disables external entity loading by default.
 		libxml_use_internal_errors(true);
-		libxml_disable_entity_loader(true);
 		$result = simplexml_load_string($string, null, LIBXML_IMPORT_FLAGS);
 		if (!$result) {
 			$errors = libxml_get_errors();
