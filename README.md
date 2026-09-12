@@ -47,10 +47,12 @@ Pre-built images are published here:
 | zabbix-web-nginx-mysql | [tamacat/zabbix-web-nginx-mysql](https://hub.docker.com/r/tamacat/zabbix-web-nginx-mysql) |
 | zabbix-agent2 | [tamacat/zabbix-agent2](https://hub.docker.com/r/tamacat/zabbix-agent2) |
 
-Tag format: `<zabbix-version>-alpine-php8-b<build-date>` — e.g.:
+Tag format: `<zabbix-version>-alpine-b<build-date>` (same format across all three
+images; only `zabbix-web` is actually PHP, so the tag doesn't call out PHP8
+specifically) — e.g.:
 
 ```bash
-podman pull tamacat/zabbix-server-mysql:5.0.47-alpine-php8-b20260909
+podman pull tamacat/zabbix-server-mysql:5.0.47-alpine-b20260912
 ```
 
 ## Layout
