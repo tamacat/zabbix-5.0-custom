@@ -531,6 +531,36 @@ int	zbx_db_connect(char *host, char *user, char *password, char *dbname, char *d
 			}
 		}
 	}
+	else if (ZBX_DB_OK == ret)
+	{
+		/* No DBTLSConnect configured: explicitly tell the connector not to enforce or verify TLS,
+		 * instead of leaving it at its own built-in default. This build's MariaDB Connector/C (3.4.x)
+		 * requires a verified encrypted connection by default when no SSL option is set at all — the
+		 * historically expected "plaintext unless asked for TLS" behaviour every earlier connector
+		 * version had does not hold here. Left unconfigured, it fails outright ("SSL is required, but
+		 * the server does not support it") against a server offering no TLS, and fails certificate
+		 * validation ("self-signed certificate in certificate chain") against one that does, regardless
+		 * of DBTLSConnect being unset. Explicitly setting MYSQL_OPT_SSL_ENFORCE=0 alone did not change
+		 * this (confirmed by testing); MYSQL_OPT_SSL_VERIFY_SERVER_CERT=0 is what actually stops the
+		 * connector from requiring TLS to be present at all — apparently its enforced-by-default
+		 * behaviour here is really "I must verify the server, and verifying means I must have TLS",
+		 * not a directly configurable "require TLS" flag of its own. There is no MYSQL_OPT_SSL_MODE on
+		 * this connector (that enum belongs to the Oracle MySQL client library only). */
+		my_bool		enforce_tls = 0;
+		my_bool		verify_tls = 0;
+
+		if (0 != mysql_optionsv(conn, MYSQL_OPT_SSL_ENFORCE, (void *)&enforce_tls))
+		{
+			zabbix_log(LOG_LEVEL_ERR, "Cannot set MYSQL_OPT_SSL_ENFORCE option.");
+			ret = ZBX_DB_FAIL;
+		}
+
+		if (ZBX_DB_OK == ret && 0 != mysql_optionsv(conn, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, (void *)&verify_tls))
+		{
+			zabbix_log(LOG_LEVEL_ERR, "Cannot set MYSQL_OPT_SSL_VERIFY_SERVER_CERT option.");
+			ret = ZBX_DB_FAIL;
+		}
+	}
 
 	if (ZBX_DB_OK == ret && NULL != ca && 0 != mysql_optionsv(conn, MYSQL_OPT_SSL_CA, ca))
 	{

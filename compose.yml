@@ -49,18 +49,19 @@ services:
       MYSQL_USER: ${MYSQL_USER:-zabbix}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-zabbix}
-      # build-and-test found this image's mariadb-connector-c always attempts TLS and never skips
-      # certificate verification for ANY DBTLSConnect value on this connector (and rejects "verify_ca"
-      # outright as unsupported for a MariaDB-linked build — src/libs/zbxdbhigh/db.c). It therefore
-      # cannot reach a MySQL whose certificate isn't already trusted by the system CA bundle. Set
-      # ZBX_DBTLSCONNECT=required if your production MySQL's cert IS already trusted and you want the
-      # connection encrypted; leave both blank (default) to connect without requesting TLS.
+      # Leave both blank (default) to connect without TLS, regardless of whether your MySQL happens to
+      # offer it — src/libs/zbxdb/db.c explicitly disables both SSL enforcement and server-certificate
+      # verification in this case. (Earlier builds of this image could not do this: this connector
+      # library's own default, with nothing configured, was to demand a verified encrypted connection —
+      # "SSL is required, but the server does not support it" against a plaintext-only server, or a
+      # certificate-chain error against one presenting a self-signed cert. Fixed at the source level, not
+      # by trusting a CA.) Set ZBX_DBTLSCONNECT=required if your production MySQL's cert IS already
+      # trusted by the system CA bundle and you want the connection encrypted and verified.
       ZBX_DBTLSCONNECT: ${ZBX_DBTLSCONNECT:-}
       ZBX_DBTLSCAFILE: ${ZBX_DBTLSCAFILE:-}
-      # This project's own convenience variable (not from the official image) for the dev-mysql
-      # verification scenario specifically: trusts dev-mysql's purpose-built dev CA at the OS level (see
-      # entrypoint.sh) instead of trying to get Zabbix's own TLS config to accept it, which is not
-      # possible for this connector. Points at the same docker/dev-mysql/certs/ca.pem dev-mysql presents.
+      # Only consulted when ZBX_DBTLSCONNECT is set (see above) — trusts a CA at the OS level for the
+      # verified-encrypted case. Not needed for the default (TLS off) path. This project's own convenience
+      # variable, not from the official image.
       TRUST_DB_CA_FILE: ${TRUST_DB_CA_FILE:-}
     volumes:
       - zbx-server-alertscripts:/var/lib/zabbix/alertscripts
@@ -127,19 +128,18 @@ services:
     # the database as utf8/utf8_bin, not utf8mb4; these flags make that the server-wide default so the
     # MYSQL_DATABASE env var's auto-created database gets the charset the schema was written for.
     #
-    # build-and-test found zabbix-server's mariadb-connector-c cannot connect at all against MySQL 8.4's
-    # own auto-generated self-signed cert: it fails the connector's certificate-CHAIN check ("self-signed
-    # certificate in certificate chain") and, even after that's fixed by trusting the CA, fails the
-    # connector's separate HOSTNAME check too (the auto-generated cert's CN doesn't match
-    # "zabbix-dev-mysql"). These ./certs/ files are a purpose-built dev-only CA + server cert, generated
-    # once for this fixed container_name/hostname (see docker/dev-mysql/certs/README — regenerate only if
-    # the hostname changes). Committing the private key is intentional: this is a throwaway,
-    # never-in-production verification database with default weak credentials already; the key secures
-    # nothing of value. zabbix-server trusts ./certs/ca.pem via TRUST_DB_CA_FILE (see its own service
-    # block and entrypoint.sh) instead of Zabbix's own DBTLSConnect, which cannot skip verification for
-    # this connector.
+    # No --ssl-* flags here: this MySQL runs with its own auto-generated self-signed cert, offering TLS
+    # by default (MySQL 8.x always does this, even with no --ssl-* flags passed at all). That's fine —
+    # zabbix-server no longer needs the server to avoid offering TLS, since it no longer requires or
+    # verifies TLS by default itself (see src/libs/zbxdb/db.c and ZBX_DBTLSCONNECT in the zabbix-server
+    # service above). Whichever way this connection actually negotiates, it works without configuration.
+    #
+    # ./certs/ (a purpose-built dev-only CA + server cert with the correct CN, see
+    # docker/dev-mysql/certs/README) is kept for anyone who deliberately wants to verify the *encrypted*
+    # path instead: uncomment the --ssl-ca/--ssl-cert/--ssl-key flags below, then set
+    # ZBX_DBTLSCONNECT=required and TRUST_DB_CA_FILE=/var/lib/mysql-certs/ca.pem in .env.
     command: --character-set-server=utf8 --collation-server=utf8_bin
-      --ssl-ca=/certs/ca.pem --ssl-cert=/certs/server-cert.pem --ssl-key=/certs/server-key.pem
+    #  --ssl-ca=/certs/ca.pem --ssl-cert=/certs/server-cert.pem --ssl-key=/certs/server-key.pem
     networks:
       - zbxnet
     environment:

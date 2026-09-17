@@ -25,13 +25,12 @@ if [ -z "${MYSQL_PASSWORD:-}" ]; then
 	fail "MYSQL_PASSWORD is not set. This variable is mandatory for Zabbix server to connect to the database."
 fi
 
-# build-and-test: this connector never skips certificate verification (see the DBTLSConnect note below),
-# so a self-signed target (this project's own dev-mysql, or any MySQL an operator hasn't given a
-# CA-signed cert) can only be reached by making the OS trust that specific certificate, not by
-# configuring Zabbix. TRUST_DB_CA_FILE (a path this container can read, e.g. a read-only mount of
-# dev-mysql's data volume) is this project's own convenience variable for that — not part of the
-# official zabbix/zabbix-server-mysql image. Needs root, which is why this container does not drop to
-# the zabbix user until after this step (see the su-exec exec below).
+# Only relevant when ZBX_DBTLSCONNECT is actually set below (verified-encrypted connections); the
+# default (TLS off, see the DBTLSConnect note below) never needs this. TRUST_DB_CA_FILE (a path this
+# container can read, e.g. a read-only mount of dev-mysql's data volume) is this project's own
+# convenience variable for trusting a self-signed target's CA at the OS level — not part of the official
+# zabbix/zabbix-server-mysql image. Needs root, which is why this container does not drop to the zabbix
+# user until after this step (see the su-exec exec below).
 if [ -n "${TRUST_DB_CA_FILE:-}" ] && [ -f "${TRUST_DB_CA_FILE}" ]; then
 	echo "**** Trusting DB server CA certificate from ${TRUST_DB_CA_FILE}..."
 	cp "${TRUST_DB_CA_FILE}" /usr/local/share/ca-certificates/db-server-ca.crt
@@ -60,17 +59,16 @@ LoadModulePath=/var/lib/zabbix/modules
 ExportDir=/var/lib/zabbix/export
 CONF
 
-# build-and-test found a known limitation with this image's mariadb-connector-c: it never skips
-# certificate verification, for ANY DBTLSConnect value ("verify_ca" is rejected outright as unsupported
-# for a MariaDB-linked build — src/libs/zbxdbhigh/db.c — and "required" still verifies). It can
-# therefore only reach a MySQL whose certificate the system CA bundle already trusts; a self-signed
-# cert (e.g. MySQL 8.x's own auto-generated default, or this project's dev-mysql) fails either way —
-# "self-signed certificate in certificate chain" with TLS available, "SSL is required, but the server
-# does not support it" if the target has no TLS at all. NFR1.3's "same-trusted-network, TLS not needed"
-# assumption does not hold for this connector regardless of network trust; see test-results.md for the
-# full investigation. Left unset (the default), no DBTLSConnect line is generated at all. Setting
-# ZBX_DBTLSCONNECT=required (matching the official zabbix/zabbix-server-mysql image's env var name
-# [BR4.1]) is exposed here for a production MySQL whose certificate IS already trusted.
+# Left unset (the default), no DBTLSConnect line is generated at all, and src/libs/zbxdb/db.c explicitly
+# disables both SSL enforcement and server-certificate verification in that case — connects without TLS
+# regardless of whether the target MySQL happens to offer it, matching NFR1.3's "same-trusted-network,
+# TLS not needed" assumption. (Earlier builds of this image could not honor that assumption: this
+# connector's own default when nothing was configured was to demand a verified encrypted connection —
+# "self-signed certificate in certificate chain" against a self-signed target, "SSL is required, but the
+# server does not support it" against one with no TLS at all, regardless of network trust. Fixed at the
+# source level; see test-results.md for the original investigation.) Setting ZBX_DBTLSCONNECT=required
+# (matching the official zabbix/zabbix-server-mysql image's env var name [BR4.1]) is exposed here for a
+# production MySQL whose certificate IS already trusted and you want the connection encrypted+verified.
 if [ -n "${ZBX_DBTLSCONNECT:-}" ]; then
 	{
 		echo ""

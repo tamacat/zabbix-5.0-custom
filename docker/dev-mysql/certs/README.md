@@ -1,13 +1,14 @@
 # dev-mysql TLS certificates (dev-only, intentionally committed)
 
-These files are a purpose-built CA + server certificate for the `zabbix-dev-mysql` verification
-database only [FR6.2]. They exist because `zabbix_server`'s mariadb-connector-c build never skips
-TLS certificate verification (see `test-results.md` in the build-and-test stage record for the full
-investigation) — MySQL 8.4's own auto-generated self-signed certificate fails both the certificate-chain
-check and, once that's fixed by trusting the CA, the separate hostname check (its CN doesn't match
-`zabbix-dev-mysql`). These files are generated once, matching that fixed container name, so both
-`dev-mysql` (via `--ssl-ca`/`--ssl-cert`/`--ssl-key` in `compose.yml`) and `zabbix-server` (via
-`TRUST_DB_CA_FILE`, trusted at the OS level in `entrypoint.sh`) agree on the same identity.
+By default `zabbix-server` connects to `dev-mysql` without TLS at all (see `ZBX_DBTLSCONNECT` in
+`.env.example`/`compose.yml` and `src/libs/zbxdb/db.c`) — these files are **not needed** for the default
+setup. They exist as an opt-in path for anyone who deliberately wants to verify the *encrypted*
+connection instead: a purpose-built CA + server certificate for the `zabbix-dev-mysql` verification
+database [FR6.2]. MySQL 8.4's own auto-generated self-signed certificate can't be used for this, because
+its CN doesn't match `zabbix-dev-mysql` (it would fail the hostname check even after trusting the CA).
+These files are generated once, matching that fixed container name, so both `dev-mysql` (via
+`--ssl-ca`/`--ssl-cert`/`--ssl-key` in `compose.yml`, currently commented out) and `zabbix-server` (via
+`TRUST_DB_CA_FILE`, trusted at the OS level in `entrypoint.sh`) agree on the same identity when enabled.
 
 **The private key (`server-key.pem`, `ca-key.pem`) is committed on purpose.** This secures a throwaway,
 never-in-production local verification database that already ships default weak credentials
