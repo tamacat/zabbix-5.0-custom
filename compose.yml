@@ -34,6 +34,9 @@ volumes:
   zbx-server-externalscripts:
   zbx-server-enc:
   zbx-agent2-enc:
+  zbx-proxy-db-data:
+  zbx-proxy-enc:
+  zbx-proxy-externalscripts:
   zbx-dev-mysql-data:
 
 services:
@@ -114,6 +117,32 @@ services:
       ZBX_HOSTNAME: ${ZBX_HOSTNAME:-}
     volumes:
       - zbx-agent2-enc:/var/lib/zabbix/enc
+    restart: unless-stopped
+
+  # Zabbix proxy (SQLite3) — buffers monitoring data for hosts assigned to it and forwards them to
+  # zabbix-server [docker/proxy/Dockerfile]. Its own local buffer database is SQLite (a documented,
+  # narrowly-scoped exception to the project's MySQL-only rule — see project.md Corrections,
+  # 2026-09-17); it is NOT part of the project's main database and never touches MySQL at all. Optional:
+  # comment this service out (and its 3 volumes above) if you have no use for a proxy.
+  zabbix-proxy:
+    build:
+      context: .
+      dockerfile: docker/proxy/Dockerfile
+    image: localhost/zabbix-proxy-sqlite3-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-custom}
+    container_name: zabbix-proxy
+    networks:
+      - zbxnet
+    depends_on:
+      - zabbix-server
+    ports:
+      - "${ZABBIX_PROXY_PORT:-10051}:10051"
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_HOSTNAME: ${ZBX_PROXY_HOSTNAME:-zabbix-proxy-sqlite3}
+    volumes:
+      - zbx-proxy-db-data:/var/lib/zabbix/db_data
+      - zbx-proxy-enc:/var/lib/zabbix/enc
+      - zbx-proxy-externalscripts:/var/lib/zabbix/externalscripts
     restart: unless-stopped
 
   # Verification/dev-only database [FR6.2][tech-stack-decisions.md]. NOT part of the production

@@ -30,6 +30,7 @@ IMAGES=(
   "localhost/zabbix-server-mysql-php8migration:${IMAGE_TAG}"
   "localhost/zabbix-web-nginx-mysql-php8migration:${IMAGE_TAG}"
   "localhost/zabbix-agent2-php8migration:${IMAGE_TAG}"
+  "localhost/zabbix-proxy-sqlite3-php8migration:${IMAGE_TAG}"
 )
 
 if [ "${SKIP_DB_UPDATE}" != "1" ]; then

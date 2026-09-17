@@ -2,10 +2,13 @@
 
 Zabbix 5.0.47, patched for PHP8 compatibility and repackaged as EOL-free,
 vulnerability-scanned Alpine 3.24 container images — `zabbix-server-mysql`,
-`zabbix-web-nginx-mysql`, and `zabbix-agent2` — staying config/behavior
-compatible with the official `zabbix/zabbix-*` images. MySQL-only backend;
-LDAP/SAML removed (confirmed unused in the source project). Zabbix itself
-stays on the 5.0.x line — only the PHP runtime and base images are updated.
+`zabbix-web-nginx-mysql`, `zabbix-agent2`, and `zabbix-proxy-sqlite3` — staying
+config/behavior compatible with the official `zabbix/zabbix-*` images. MySQL-only
+backend for the main database; LDAP/SAML removed (confirmed unused in the source
+project). `zabbix-proxy-sqlite3` is the one exception: its own local buffer
+database is SQLite, same as the official image of that name — it never touches
+the main MySQL database. Zabbix itself stays on the 5.0.x line — only the PHP
+runtime and base images are updated.
 
 ## Quick start
 
@@ -53,8 +56,9 @@ Pre-built images are published here:
 | zabbix-server-mysql | [tamacat/zabbix-server-mysql](https://hub.docker.com/r/tamacat/zabbix-server-mysql) |
 | zabbix-web-nginx-mysql | [tamacat/zabbix-web-nginx-mysql](https://hub.docker.com/r/tamacat/zabbix-web-nginx-mysql) |
 | zabbix-agent2 | [tamacat/zabbix-agent2](https://hub.docker.com/r/tamacat/zabbix-agent2) |
+| zabbix-proxy-sqlite3 | [tamacat/zabbix-proxy-sqlite3](https://hub.docker.com/r/tamacat/zabbix-proxy-sqlite3) |
 
-Tag format: `<zabbix-version>-alpine-b<build-date>` (same format across all three
+Tag format: `<zabbix-version>-alpine-b<build-date>` (same format across all four
 images; only `zabbix-web` is actually PHP, so the tag doesn't call out PHP8
 specifically) — e.g.:
 
@@ -67,7 +71,7 @@ podman pull tamacat/zabbix-server-mysql:5.0.47-alpine-b20260917
 | Path | Contents |
 |---|---|
 | `sources/zabbix-5.0.47/` | Patched Zabbix source (PHP8 compatibility fixes, LDAP/SAML removed) |
-| `docker/` | Dockerfiles + entrypoints for server / web / agent2, plus the dev-only `dev-mysql` verification database |
+| `docker/` | Dockerfiles + entrypoints for server / web / agent2 / proxy, plus the dev-only `dev-mysql` verification database |
 | `scripts/` | Build, CI, and publish scripts |
 | `compose.yml`, `.env.example` | Container orchestration |
 

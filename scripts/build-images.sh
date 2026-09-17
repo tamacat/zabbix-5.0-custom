@@ -55,6 +55,7 @@ COMPONENTS=(
   "zabbix-server-mysql-php8migration:zabbix-server-mysql"
   "zabbix-web-nginx-mysql-php8migration:zabbix-web-nginx-mysql"
   "zabbix-agent2-php8migration:zabbix-agent2"
+  "zabbix-proxy-sqlite3-php8migration:zabbix-proxy-sqlite3"
 )
 
 TAG_FILE="scripts/.last-image-tag"
