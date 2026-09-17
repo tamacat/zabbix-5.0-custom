@@ -12,12 +12,6 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 UI_DIR="sources/zabbix-5.0.47/ui"
-IMAGE_TAG="${ZABBIX_IMAGE_TAG:-5.0.47-php8}"
-IMAGES=(
-  "localhost/zabbix-server-mysql-php8migration:${IMAGE_TAG}"
-  "localhost/zabbix-web-nginx-mysql-php8migration:${IMAGE_TAG}"
-  "localhost/zabbix-agent2-php8migration:${IMAGE_TAG}"
-)
 
 echo "=================================================================="
 echo "Stage 1/4: Build — install the diff-scope PHPUnit toolchain"
@@ -52,13 +46,9 @@ podman compose build
 echo "=================================================================="
 echo "Stage 4/4: Scan — Trivy (blocking gate: CRITICAL only; see quality-gates.md)"
 echo "=================================================================="
-for image in "${IMAGES[@]}"; do
-  echo "--- Full report (informational, all severities): ${image} ---"
-  trivy image --severity CRITICAL,HIGH,MEDIUM,LOW "${image}"
-
-  echo "--- Blocking gate (CRITICAL only): ${image} ---"
-  trivy image --severity CRITICAL --exit-code 1 "${image}"
-done
+# Delegates to scripts/security-scan.sh (the standalone scan-only script) so the scanning logic has a
+# single source of truth, usable both here and on its own without a full build+test+package cycle.
+./scripts/security-scan.sh
 
 echo "=================================================================="
 echo "All gates passed. Safe to squash-merge this branch into main."

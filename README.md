@@ -35,7 +35,14 @@ podman compose --profile dev up -d dev-mysql
 ./scripts/ci-pipeline.sh     # build + PHPUnit + podman compose build + Trivy scan
 ./scripts/build-images.sh    # build + tag for publishing (see Docker Hub below)
 ./scripts/push-images.sh     # push the tags build-images.sh produced (requires `podman login docker.io` first)
+./scripts/security-scan.sh   # Trivy scan only, against whatever images are already built locally
 ```
+
+`security-scan.sh` runs the same Trivy checks as `ci-pipeline.sh`'s Scan stage (in fact
+`ci-pipeline.sh` just calls it), but on its own — no build/test/package step first. Use it to
+re-check the images you already have whenever you hear about a new CVE, without rebuilding.
+Set `SKIP_DB_UPDATE=1` to skip refreshing Trivy's vulnerability database first (faster, but the
+results may miss anything published since your last scan).
 
 ## Docker Hub
 
@@ -52,7 +59,7 @@ images; only `zabbix-web` is actually PHP, so the tag doesn't call out PHP8
 specifically) — e.g.:
 
 ```bash
-podman pull tamacat/zabbix-server-mysql:5.0.47-alpine-b20260912
+podman pull tamacat/zabbix-server-mysql:5.0.47-alpine-b20260917
 ```
 
 ## Layout
