@@ -16,8 +16,10 @@
 #   podman compose --profile dev up -d dev-mysql   # starts the throwaway verification/dev MySQL 8.4
 #                                                    # instead of/alongside pointing at a real database
 #
-# Image tag convention: "<zabbix version>-php8" (e.g. 5.0.47-php8) to distinguish from the upstream
-# zabbix/zabbix-*-mysql images [tech-stack-decisions.md「イメージバージョン表記」].
+# Image tag convention: "<zabbix version>-custom" (e.g. 5.0.47-custom) to distinguish from the upstream
+# zabbix/zabbix-*-mysql images [tech-stack-decisions.md「イメージバージョン表記」]. This is the LOCAL
+# build tag (shared across all 3 images regardless of language) — unrelated to the separate
+# "<version>-alpine-b<date>" scheme scripts/build-images.sh uses for the published Docker Hub tags.
 #
 # build-and-test: the top-level "version" key is obsolete in the modern Compose spec (Docker Compose
 # v2 / podman compose both warn and ignore it) — omitted rather than carrying a dead field.
@@ -39,7 +41,7 @@ services:
     build:
       context: .
       dockerfile: docker/server/Dockerfile
-    image: localhost/zabbix-server-mysql-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-php8}
+    image: localhost/zabbix-server-mysql-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-custom}
     container_name: zabbix-server
     networks:
       - zbxnet
@@ -76,7 +78,7 @@ services:
     build:
       context: .
       dockerfile: docker/web/Dockerfile
-    image: localhost/zabbix-web-nginx-mysql-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-php8}
+    image: localhost/zabbix-web-nginx-mysql-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-custom}
     container_name: zabbix-web
     networks:
       - zbxnet
@@ -101,7 +103,7 @@ services:
     build:
       context: .
       dockerfile: docker/agent2/Dockerfile
-    image: localhost/zabbix-agent2-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-php8}
+    image: localhost/zabbix-agent2-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-custom}
     container_name: zabbix-agent2
     networks:
       - zbxnet
