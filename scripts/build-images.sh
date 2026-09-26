@@ -25,6 +25,7 @@
 #   BUILD_DATE=20260917               # defaults to today (UTC)
 #   IMAGE_TAG=5.0.47-alpine-b20260917 # overrides the whole computed tag
 #   ZABBIX_IMAGE_TAG=5.0.47-custom    # must match compose.yml's build output tag
+#   CONTAINER_ENGINE=podman           # "docker" on GitHub Actions (see .github/workflows/ci-release.yml)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -44,11 +45,12 @@ ZABBIX_VERSION="${ZABBIX_VERSION:-5.0.47}"
 BUILD_DATE="${BUILD_DATE:-$(date -u +%Y%m%d)}"
 IMAGE_TAG="${IMAGE_TAG:-${ZABBIX_VERSION}-alpine-b${BUILD_DATE}}"
 LOCAL_TAG="${ZABBIX_IMAGE_TAG:-5.0.47-custom}"
+ENGINE="${CONTAINER_ENGINE:-podman}"
 
 echo "=================================================================="
-echo "Building images (podman compose build) — local tag: ${LOCAL_TAG}"
+echo "Building images (${ENGINE} compose build) — local tag: ${LOCAL_TAG}"
 echo "=================================================================="
-podman compose build
+"${ENGINE}" compose build
 
 # component key -> "<local image name>:<destination image name>"
 COMPONENTS=(
@@ -72,7 +74,7 @@ for pair in "${COMPONENTS[@]}"; do
   dst="${REGISTRY_NAMESPACE}/${dst_name}:${IMAGE_TAG}"
   echo "  ${src}"
   echo "    -> ${dst}"
-  podman tag "${src}" "${dst}"
+  "${ENGINE}" tag "${src}" "${dst}"
   echo "${dst}" >> "${TAG_FILE}"
 done
 
@@ -80,5 +82,5 @@ echo ""
 echo "Tagged images (recorded in ${TAG_FILE} for scripts/push-images.sh):"
 cat "${TAG_FILE}"
 echo ""
-echo "Next: run 'podman login docker.io' (once), then scripts/push-images.sh"
+echo "Next: run '${ENGINE} login docker.io' (once), then scripts/push-images.sh"
 echo "to push these exact tags."

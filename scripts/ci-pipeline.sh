@@ -12,6 +12,8 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 UI_DIR="sources/zabbix-5.0.47/ui"
+# "podman" locally; the GitHub Actions workflow sets CONTAINER_ENGINE=docker.
+ENGINE="${CONTAINER_ENGINE:-podman}"
 
 echo "=================================================================="
 echo "Stage 1/4: Build — install the diff-scope PHPUnit toolchain"
@@ -26,22 +28,22 @@ echo "=================================================================="
   tests/unit/TriggersIncDecodeTest.php \
   tests/unit/CFrontendSetupTest.php)
 (cd "${UI_DIR}" && vendor/bin/phpunit --testsuite integration \
-  tests/integration/AuthenticationConfigTest.php)
-# The two DB-backed AuthenticationConfigTest cases auto-skip (markTestSkipped) when no
-# reachable MySQL is configured. To exercise them for real before a merge that touches
-# authentication, start dev-mysql first and pass its connection details:
+  tests/integration/AuthenticationConfigTest.php \
+  tests/integration/DbErrorHandlingTest.php)
+# The database-backed cases (two in AuthenticationConfigTest, one in DbErrorHandlingTest) auto-skip
+# (markTestSkipped) when no reachable MySQL is configured. To exercise them for real before a merge
+# that touches authentication or the DB layer, start dev-mysql first and pass its connection details:
 #   podman compose --profile dev up -d dev-mysql
 #   ZBX_TEST_DB_HOST=<dev-mysql host> ZBX_TEST_DB_PORT=3306 ZBX_TEST_DB_USER=zabbix \
 #     ZBX_TEST_DB_PASSWORD=zabbix ZBX_TEST_DB_DATABASE=zabbix \
-#     (cd sources/zabbix-5.0.47/ui && vendor/bin/phpunit --testsuite integration \
-#       tests/integration/AuthenticationConfigTest.php)
+#     (cd sources/zabbix-5.0.47/ui && vendor/bin/phpunit --testsuite integration)
 
 echo "=================================================================="
 echo "Stage 3/4: Package — build the 3 images via compose.yml"
 echo "=================================================================="
-# 'podman compose build' (not a bare 'podman build') so the images come out in Docker
+# '<engine> compose build' (not a bare 'podman build') so the images come out in Docker
 # format with HEALTHCHECK enabled — see build-instructions.md "既知の制約".
-podman compose build
+"${ENGINE}" compose build
 
 echo "=================================================================="
 echo "Stage 4/4: Scan — Trivy (blocking gate: CRITICAL only; see quality-gates.md)"
@@ -52,6 +54,7 @@ echo "=================================================================="
 
 echo "=================================================================="
 echo "All gates passed. Safe to squash-merge this branch into main."
-echo "After merging: podman compose up -d, then run the manual smoke test"
-echo "(quality-gates.md 'Deploy / Smoke Test')."
+echo "Next: scripts/smoke-test.sh exercises the built images end to end (the GitHub Actions"
+echo "workflow runs it right after this script). After merging: ${ENGINE} compose up -d,"
+echo "then run the manual smoke test (quality-gates.md 'Deploy / Smoke Test')."
 echo "=================================================================="
