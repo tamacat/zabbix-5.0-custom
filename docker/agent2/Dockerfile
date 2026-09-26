@@ -41,7 +41,12 @@ RUN sh ./configure --disable-dependency-tracking --enable-agent2 --with-openssl
 # CGO_CFLAGS as a `make` command-line variable (not an `ENV`) is required too, confirmed by testing —
 # Makefile.in's own `CGO_CFLAGS = @CGO_CFLAGS@` assignment overrides an inherited environment value, but
 # a command-line `make VAR=...` override always wins and correctly propagates into the src/go sub-make.
-RUN make -j"$(nproc)" CGO_CFLAGS="-I/build/include -D_LARGEFILE64_SOURCE" \
+#
+# src/go/bin is an empty directory in the tarball, so git does not keep it and a checkout (CI, a fresh clone)
+# lacks it. `go build -o bin ./...` builds several main packages and only accepts an existing directory for
+# -o, otherwise: "go: cannot write multiple packages to non-directory bin".
+RUN mkdir -p src/go/bin \
+	&& make -j"$(nproc)" CGO_CFLAGS="-I/build/include -D_LARGEFILE64_SOURCE" \
 	&& cp src/go/bin/zabbix_agent2 /build/bin/zabbix_agent2
 
 FROM alpine:3.24
