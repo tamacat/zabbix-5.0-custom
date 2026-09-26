@@ -21,6 +21,15 @@ RUN apk add --no-cache \
 WORKDIR /build
 COPY sources/zabbix-5.0.47/ /build/
 
+# The release tarball ships pre-generated autotools output (aclocal.m4, configure, config.h.in, Makefile.in).
+# Whether make thinks that output is stale depends on file mtimes, and a fresh Linux checkout (CI) leaves
+# them in arbitrary order; a "stale" aclocal.m4 makes make regenerate it with an automake this image does not
+# have (the tarball wants aclocal-1.16, Alpine ships 1.18) and the build dies. Touch the generated files in
+# dependency order so they never look stale. Windows checkouts happened to get the order right, which is why
+# this only showed up on GitHub Actions.
+RUN touch aclocal.m4 \
+	&& find . \( -name configure -o -name config.h.in -o -name Makefile.in \) -exec touch {} +
+
 # build-and-test found ./configure lost its executable bit somewhere in this repo's checkout/copy
 # history (COPY preserves the source filesystem's permission bits, and this workspace's copy of
 # sources/zabbix-5.0.47/configure is not marked executable) — invoke it via `sh` instead of relying on

@@ -25,6 +25,10 @@ RUN apk add --no-cache \
 WORKDIR /build
 COPY sources/zabbix-5.0.47/ /build/
 
+# Keep make from trying to regenerate the tarball's autotools output — see docker/server/Dockerfile.
+RUN touch aclocal.m4 \
+	&& find . \( -name configure -o -name config.h.in -o -name Makefile.in \) -exec touch {} +
+
 # Same configure-via-sh and --disable-dependency-tracking workarounds as docker/server/Dockerfile — see
 # that file's comments for why. --with-sqlite3 (not --with-mysql) is the one deliberate difference:
 # zabbix-proxy-sqlite3 stores its local buffer in a SQLite file, matching the official

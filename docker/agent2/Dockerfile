@@ -22,6 +22,10 @@ RUN apk add --no-cache go build-base git autoconf automake libtool pcre-dev open
 WORKDIR /build
 COPY sources/zabbix-5.0.47/ /build/
 
+# Keep make from trying to regenerate the tarball's autotools output — see docker/server/Dockerfile.
+RUN touch aclocal.m4 \
+	&& find . \( -name configure -o -name config.h.in -o -name Makefile.in \) -exec touch {} +
+
 RUN sh ./configure --disable-dependency-tracking --enable-agent2 --with-openssl
 
 # go-sqlite3 (a transitive plugin dependency of zabbix_agent2 itself, not excluded by targeting only
