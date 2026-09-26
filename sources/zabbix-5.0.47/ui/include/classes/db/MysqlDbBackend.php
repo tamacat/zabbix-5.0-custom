@@ -172,7 +172,14 @@ class MysqlDbBackend extends DbBackend {
 			$tls_mode = MYSQLI_CLIENT_SSL;
 		}
 
-		@$resource->real_connect($host, $user, $password, $dbname, $port, null, $tls_mode);
+		try {
+			@$resource->real_connect($host, $user, $password, $dbname, $port, null, $tls_mode);
+		}
+		catch (mysqli_sql_exception $e) {
+			// PHP 8.1+ mysqli throws on failure instead of only setting $resource->error.
+			$this->setError($e->getMessage());
+			return null;
+		}
 
 		if ($resource->error) {
 			$this->setError($resource->error);

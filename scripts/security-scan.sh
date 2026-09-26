@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Vulnerability scan for the 3 built Zabbix images (Trivy) — standalone, so you can run it on its own
+# Vulnerability scan for the 4 built Zabbix images (Trivy) — standalone, so you can run it on its own
 # without going through the whole build+test+package cycle in scripts/ci-pipeline.sh (which calls this
 # script for its own Scan stage, rather than duplicating this logic).
 #
-# Manual trigger only (ci-pipeline-questions.md Q2): run this yourself whenever you become aware of an
-# Alpine/dependency update, or just periodically. There is no automated schedule.
+# Run it yourself whenever you become aware of an Alpine/dependency update. GitHub Actions
+# (.github/workflows/ci-release.yml) also runs it on every push/PR and on a weekly schedule, and once more
+# on the exact images about to be published.
 #
-# Requires the 3 images to already be built (`podman compose build` / scripts/ci-pipeline.sh) and the
-# `trivy` CLI to be installed and on PATH.
+# Requires the 4 images to already be built (`podman compose build` / scripts/ci-pipeline.sh) and the
+# `trivy` CLI to be installed and on PATH. Set CONTAINER_ENGINE=docker to look for them in Docker.
 #
 # Exit code 0 = every image passed the blocking gate (CRITICAL == 0 across the board).
 # Exit code 1 = at least one image has a CRITICAL finding, OR an image is missing/couldn't be scanned.
@@ -25,11 +26,13 @@ if [ -f .env ]; then
 fi
 
 SKIP_DB_UPDATE="${SKIP_DB_UPDATE:-0}"
+ENGINE="${CONTAINER_ENGINE:-podman}"
 IMAGE_TAG="${ZABBIX_IMAGE_TAG:-5.0.47-custom}"
 IMAGES=(
   "localhost/zabbix-server-mysql-php8migration:${IMAGE_TAG}"
   "localhost/zabbix-web-nginx-mysql-php8migration:${IMAGE_TAG}"
   "localhost/zabbix-agent2-php8migration:${IMAGE_TAG}"
+  "localhost/zabbix-proxy-sqlite3-php8migration:${IMAGE_TAG}"
 )
 
 if [ "${SKIP_DB_UPDATE}" != "1" ]; then
@@ -49,9 +52,9 @@ for image in "${IMAGES[@]}"; do
   echo "Scanning ${image}"
   echo "=================================================================="
 
-  if ! podman image exists "${image}"; then
+  if ! "${ENGINE}" image inspect "${image}" >/dev/null 2>&1; then
     echo "!! Image not found locally: ${image}"
-    echo "!! Build it first: podman compose build   (or scripts/ci-pipeline.sh / scripts/build-images.sh)"
+    echo "!! Build it first: ${ENGINE} compose build   (or scripts/ci-pipeline.sh / scripts/build-images.sh)"
     overall_status=1
     continue
   fi

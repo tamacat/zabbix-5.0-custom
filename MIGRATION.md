@@ -24,7 +24,10 @@ structure, or file layout was altered, and Zabbix's own custom autoloader was le
 - Live reproduction with a temporarily instrumented error handler for one bug (see
   [The graph-rendering incident](#the-graph-rendering-incident)) that only manifested as a
   resource-exhaustion crash rather than a pattern a static scan alone would flag as suspicious.
-- The bundled PHPUnit suite (25 cases covering the diff scope) re-run after every change.
+- Running the PHPUnit suite on a stock PHP 8.3 (in CI, and against a real MySQL) — the way one
+  behavior change no static scan can see, [mysqli's exceptions](#8-mysqli-throws-instead-of-returning-false-behavior-change-in-php-81),
+  was found.
+- The bundled PHPUnit suite (covering the diff scope) re-run after every change.
 
 ## Issues found and fixed
 
@@ -166,6 +169,54 @@ uasort($array, [self::class, 'compare']);
 `include/classes/helpers/CArrayHelper.php`. `self::class` resolves to the exact same class name
 without triggering the deprecation.
 
+### 8. `mysqli` throws instead of returning `false` (behavior change in PHP 8.1)
+
+Unlike the items above, this one is invisible to static analysis: no function signature or
+deprecation notice changed. PHP 8.1 switched `mysqli`'s default error mode so that a failed
+connect or query throws `mysqli_sql_exception`, where PHP 7 returned `false` and left an error
+string behind. Zabbix 5.0's database layer was written for the old contract — `DBconnect()`,
+`DBselect()` and `DBexecute()` check for `false`, then report through `error(..., 'sql')` and the
+transaction bookkeeping (`$DB['TRANSACTION_NO_FAILED_SQLS']`) — so on PHP 8.1+ a failing statement
+skipped all of that and surfaced as an uncaught exception.
+
+```php
+// before
+@$resource->real_connect($host, $user, $password, $dbname, $port, null, $tls_mode);
+if (!$result = mysqli_query($DB['DB'], $query)) { error(...); }
+// after
+try {
+	@$resource->real_connect($host, $user, $password, $dbname, $port, null, $tls_mode);
+}
+catch (mysqli_sql_exception $e) {
+	$this->setError($e->getMessage());
+	return null;
+}
+try {
+	if (!$result = mysqli_query($DB['DB'], $query)) { error(...); }
+}
+catch (mysqli_sql_exception $e) {
+	$result = false;
+	error('Error in query ['.$query.'] ['.$e->getMessage().']', 'sql');
+}
+```
+
+- `include/classes/db/MysqlDbBackend.php` — `connect()`.
+- `include/db.inc.php` — `DBselect()` and `DBexecute()` (the only two `mysqli_query()` call sites).
+
+This is the same shape of fix Zabbix itself shipped in 6.0 (which additionally sets
+`mysqli_report()` explicitly). The original `false` checks are kept inside the `try`, so PHP 8.0,
+where `mysqli` does not throw by default, behaves exactly as before.
+
+Found by running the integration tests on a stock PHP 8.3: `AuthenticationConfigTest` was written
+to skip itself when no test database is reachable, but on PHP 8.1+ its `@DBconnect()` threw instead.
+Where the exception ended up matters less in practice than it sounds — with the database down, the
+frontend's generic handler still rendered its usual "Warning … Retry" page — but the contract
+mattered to anything calling `DBconnect()` directly (the setup wizard, the tests), and a failed
+query in the middle of an API call or a transaction is not a place to depend on that handler.
+`tests/integration/DbErrorHandlingTest.php` now covers it: a connect to an unreachable server must
+return `false` with a message (runs with no database at all), and failed queries must return `false`
+and record an `sql` error (needs the test database).
+
 ## Notes on false positives
 
 Not every PHPStan finding under level 5 or the deprecation-rules extension corresponded to an
@@ -192,7 +243,8 @@ aren't "fixed" by mistake:
 - `phpstan/phpstan-deprecation-rules`: 1 genuine PHP-engine deprecation found and fixed
   (`libxml_disable_entity_loader()`); all other hits are Zabbix's own pre-existing annotations.
 - `grep` for functions removed outright in PHP 8: none present.
-- PHPUnit: 21 unit + 4 integration tests, 229 assertions, all green.
+- PHPUnit on PHP 8.3: 21 unit + 6 integration tests, all green against a real MySQL (the
+  database-backed cases skip themselves when none is reachable).
 - Manual verification: full stack (`server` + `web` + `agent2` + dev MySQL) brought up via
   `podman compose up`, login, dashboard, and 19 sampled graphs across every draw type confirmed
   rendering correctly with zero PHP warnings logged.

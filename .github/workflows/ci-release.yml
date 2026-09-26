@@ -1,0 +1,152 @@
+# CI / Release for zabbix-5.0-custom — the same shape as zabbix-6.0-custom's pipeline, on this project's
+# own scripts.
+#
+#   lint     advisory hadolint + shellcheck (never blocks)
+#   verify   PHPUnit -> build the 4 images -> Trivy gate (CRITICAL blocks) -> full-stack smoke test
+#   publish  waits for approval on the "production" environment, then rebuilds, re-scans the exact images
+#            about to go out, pushes them to Docker Hub, signs them (cosign, keyless) and attaches an SBOM
+#
+# One-time GitHub setup (repository settings, not something this file can do) is in README.md under
+# "Continuous Integration": a "production" environment with a required reviewer, and the
+# DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets.
+name: CI / Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 03:00 UTC: rebuild on whatever Alpine packages are current and re-scan against the latest CVE
+    # database, so new fixes and new CVEs are picked up without anyone remembering to. Edit the cron freely.
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-release-${{ github.ref }}
+  # A newer push to a PR supersedes the older run; runs that may publish are never cancelled midway.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  TRIVY_VERSION: "0.74.0"
+  CONTAINER_ENGINE: docker
+  # compose.yml refuses to even build without these (they are `${VAR:?...}` there). Placeholders only —
+  # nothing here talks to a real database; scripts/smoke-test.sh points the stack at the bundled dev-mysql.
+  DB_SERVER_HOST: ci-placeholder
+  MYSQL_PASSWORD: ci-placeholder
+
+jobs:
+  lint:
+    name: Lint (advisory)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: hadolint (server)
+        uses: hadolint/hadolint-action@v3.5.0
+        continue-on-error: true
+        with:
+          dockerfile: docker/server/Dockerfile
+
+      - name: hadolint (web)
+        uses: hadolint/hadolint-action@v3.5.0
+        continue-on-error: true
+        with:
+          dockerfile: docker/web/Dockerfile
+
+      - name: hadolint (agent2)
+        uses: hadolint/hadolint-action@v3.5.0
+        continue-on-error: true
+        with:
+          dockerfile: docker/agent2/Dockerfile
+
+      - name: hadolint (proxy)
+        uses: hadolint/hadolint-action@v3.5.0
+        continue-on-error: true
+        with:
+          dockerfile: docker/proxy/Dockerfile
+
+      - name: shellcheck (scripts and entrypoints)
+        continue-on-error: true
+        run: shellcheck scripts/*.sh docker/*/entrypoint.sh
+
+  verify:
+    name: Verify (tests, build, scan, smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      build_date: ${{ steps.vars.outputs.build_date }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same PHP line and extensions as docker/web/Dockerfile ships, so the diff-scope PHPUnit suite runs
+      # on what production runs.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: bcmath, ctype, gd, gettext, mbstring, mysqli, sockets, xml, xmlreader, xmlwriter
+          tools: composer:v2
+
+      - uses: ./.github/actions/install-trivy
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      # Fixed once here so a publish that waits a long time for approval still tags the day it was verified.
+      - name: Compute build date
+        id: vars
+        run: echo "build_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      # composer install + PHPUnit (blocking) -> compose build of all 4 images -> scripts/security-scan.sh
+      # (full report, CRITICAL findings block).
+      - name: Test, build and scan (scripts/ci-pipeline.sh)
+        run: ./scripts/ci-pipeline.sh
+
+      - name: Full-stack smoke test (scripts/smoke-test.sh)
+        run: ./scripts/smoke-test.sh
+
+  publish:
+    # Runs after a push to main, on the weekly schedule and on manual dispatch — never for pull requests, so
+    # code that has not been merged is never published.
+    #
+    # The self-review gate is the `environment: production` protection rule (required reviewer): the job does
+    # not start until it is approved. Creating that environment is a manual GitHub-side step (README.md).
+    name: Publish (approval required)
+    needs: verify
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # cosign keyless signing (Sigstore OIDC)
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/install-trivy
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - uses: sigstore/cosign-installer@v4.1.2
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Rebuilt rather than carried over from verify (jobs do not share images), so the next step re-scans
+      # exactly what is about to be pushed: approval can arrive hours after verify, and Alpine packages and the
+      # CVE database keep moving in the meantime.
+      - name: Build and tag the release images
+        env:
+          BUILD_DATE: ${{ needs.verify.outputs.build_date }}
+        run: ./scripts/build-images.sh
+
+      - name: Re-scan the images about to be published (CRITICAL blocks)
+        run: ./scripts/security-scan.sh
+
+      - name: Push, sign and attach SBOM
+        run: ./scripts/push-images.sh

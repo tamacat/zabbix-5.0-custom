@@ -63,7 +63,13 @@ COPY docker/web/conf/zabbix.ini ${PHP_INI_DIR}/conf.d/99-zabbix.ini
 # real one at container start from environment variables, so it is never baked into the image.
 COPY --chown=zabbix:zabbix sources/zabbix-5.0.47/ui/ /usr/share/zabbix/
 
-RUN mkdir -p /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi /tmp/nginx-uwsgi /tmp/nginx-scgi \
+# These directories are empty in the Zabbix tarball, and git does not keep empty directories, so a checkout
+# (CI, a fresh clone) does not have them and the COPY above cannot bring them along. The frontend expects
+# them all the same: Administration -> General -> Modules -> "Scan directory" iterates ui/modules and throws
+# if it is missing, and local/ is where site-specific controllers, views and config are meant to go.
+RUN mkdir -p /usr/share/zabbix/modules /usr/share/zabbix/conf/certs /usr/share/zabbix/local/conf \
+		/usr/share/zabbix/local/app/controllers /usr/share/zabbix/local/app/partials /usr/share/zabbix/local/app/views \
+	&& mkdir -p /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi /tmp/nginx-uwsgi /tmp/nginx-scgi \
 	&& chown -R zabbix:zabbix /usr/share/zabbix /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi \
 		/tmp/nginx-uwsgi /tmp/nginx-scgi
 

@@ -238,8 +238,15 @@ function DBselect($query, $limit = null, $offset = 0) {
 
 	switch ($DB['TYPE']) {
 		case ZBX_DB_MYSQL:
-			if (!$result = mysqli_query($DB['DB'], $query)) {
-				error('Error in query ['.$query.'] ['.mysqli_error($DB['DB']).']', 'sql');
+			// PHP 8.1+ mysqli throws on a failed query instead of returning false.
+			try {
+				if (!$result = mysqli_query($DB['DB'], $query)) {
+					error('Error in query ['.$query.'] ['.mysqli_error($DB['DB']).']', 'sql');
+				}
+			}
+			catch (mysqli_sql_exception $e) {
+				$result = false;
+				error('Error in query ['.$query.'] ['.$e->getMessage().']', 'sql');
 			}
 			break;
 		case ZBX_DB_POSTGRESQL:
@@ -339,8 +346,15 @@ function DBexecute($query) {
 
 	switch ($DB['TYPE']) {
 		case ZBX_DB_MYSQL:
-			if (!$result = mysqli_query($DB['DB'], $query)) {
-				error('Error in query ['.$query.'] ['.mysqli_error($DB['DB']).']', 'sql');
+			// PHP 8.1+ mysqli throws on a failed query instead of returning false.
+			try {
+				if (!$result = mysqli_query($DB['DB'], $query)) {
+					error('Error in query ['.$query.'] ['.mysqli_error($DB['DB']).']', 'sql');
+				}
+			}
+			catch (mysqli_sql_exception $e) {
+				$result = false;
+				error('Error in query ['.$query.'] ['.$e->getMessage().']', 'sql');
 			}
 			break;
 		case ZBX_DB_POSTGRESQL:
