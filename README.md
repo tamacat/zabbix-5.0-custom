@@ -32,6 +32,45 @@ podman compose --profile dev up -d dev-mysql
 
 `docker compose` works the same way if you're not using Podman.
 
+## zabbix-proxy
+
+`zabbix-proxy-sqlite3` is configured with the same environment variables as the official image of that name;
+`entrypoint.sh` turns them into `zabbix_proxy.conf` at every start. An unset or empty variable leaves the
+parameter at Zabbix's default.
+
+| Variable | Parameter | Variable | Parameter |
+|---|---|---|---|
+| `ZBX_SERVER_HOST` (default `zabbix-server`) | `Server` | `ZBX_CONFIGFREQUENCY` | `ConfigFrequency` |
+| `ZBX_SERVER_PORT` (default `10051`) | `ServerPort` | `ZBX_DATASENDERFREQUENCY` | `DataSenderFrequency` |
+| `ZBX_HOSTNAME` (default `zabbix-proxy-sqlite3`) | `Hostname`, and the SQLite file `<hostname>.sqlite` | `ZBX_PROXYHEARTBEATFREQUENCY` | `HeartbeatFrequency` |
+| `ZBX_HOSTNAMEITEM` | `HostnameItem` | `ZBX_PROXYLOCALBUFFER`, `ZBX_PROXYOFFLINEBUFFER` | `ProxyLocalBuffer`, `ProxyOfflineBuffer` |
+| `ZBX_USE_NODE_NAME_AS_DB_NAME=true` | SQLite file named after the container's host name | `ZBX_STARTPOLLERS`, `ZBX_STARTTRAPPERS`, `ZBX_STARTPINGERS`, `ZBX_CACHESIZE`, `ZBX_HISTORYCACHESIZE`, `ZBX_TIMEOUT`, ... (the full list is in `entrypoint.sh`) | the matching `Start*`, `CacheSize`, ... |
+| `ZBX_PROXYMODE` (`0` active, `1` passive) | `ProxyMode` | `ZBX_LISTENIP`, `ZBX_LISTENPORT`, `ZBX_SOURCEIP`, `ZBX_DEBUGLEVEL` | the matching parameter |
+| `ZBX_TLSCONNECT`, `ZBX_TLSACCEPT`, `ZBX_TLSPSKIDENTITY`, `ZBX_TLSSERVERCERT*`, `ZBX_TLSCIPHER*` | the matching `TLS*` parameter | `ZBX_TLSPSK`, `ZBX_TLSCA`, `ZBX_TLSCERT`, `ZBX_TLSKEY`, `ZBX_TLSCRL` | the content itself, written to a file under `enc_internal` |
+| `ZBX_TLSPSKFILE`, `ZBX_TLSCAFILE`, `ZBX_TLSCERTFILE`, `ZBX_TLSKEYFILE`, `ZBX_TLSCRLFILE` | a path; a relative one is looked up in the `enc` volume | `ZBX_LOADMODULE` (comma separated) | `LoadModule` (plus `LoadModulePath`) |
+
+As in the official image, the `ZBX_*` variables are removed from the environment `zabbix_proxy` runs with
+(`ZBX_CLEAR_ENV=false` keeps them). Variables for features this image is built without — the Java gateway,
+IPMI, SNMP traps, SSH and fping — are not supported; the proxy says so with a warning at start instead of
+dropping them silently. Run `podman logs zabbix-proxy` after changing the environment and look for
+`WARNING` lines.
+
+**Register the proxy before relying on it.** A proxy that starts before it exists on the server cannot fetch
+its configuration, and then waits `ConfigFrequency` (3600 s by default) for the next try. The server also
+learns about a new proxy only when its own configuration cache refreshes (every 60 s). So after creating the
+proxy in the frontend (Administration → Proxies, with the same name as `ZBX_HOSTNAME`) or through the API:
+
+```bash
+podman exec zabbix-server zabbix_server -R config_cache_reload   # the server learns about the proxy
+podman exec zabbix-proxy  zabbix_proxy  -R config_cache_reload   # the proxy fetches its configuration now
+podman logs zabbix-proxy | grep 'received configuration data'    # confirm
+```
+
+or set `ZBX_CONFIGFREQUENCY` to something short such as `60`. Active-agent hosts then pick up their checks
+within the agent's `RefreshActiveChecks` (120 s by default). "healthy" on the container is only a PID-file
+check; `received configuration data` in the log and a recent `lastaccess` in the proxy list are what show it
+works.
+
 ## Building images
 
 ```bash
@@ -39,7 +78,8 @@ podman compose --profile dev up -d dev-mysql
 ./scripts/build-images.sh    # build + tag for publishing (see Docker Hub below)
 ./scripts/push-images.sh     # push the tags build-images.sh produced (requires `podman login docker.io` first)
 ./scripts/security-scan.sh   # Trivy scan only, against whatever images are already built locally
-./scripts/smoke-test.sh      # bring the stack up on the bundled dev-mysql and exercise web -> PHP 8 -> MySQL
+./scripts/smoke-test.sh      # bring the stack up on the bundled dev-mysql and exercise web -> PHP 8 -> MySQL, and proxy -> server
+./scripts/test-proxy-entrypoint.sh   # proxy env-variable handling and runtime-control commands (needs no server)
 ```
 
 `security-scan.sh` runs the same Trivy checks as `ci-pipeline.sh`'s Scan stage (in fact
@@ -51,7 +91,9 @@ results may miss anything published since your last scan).
 `smoke-test.sh` needs the images built first. It always targets the bundled `dev-mysql` (it forces
 `COMPOSE_PROFILES=dev` and `DB_SERVER_HOST=zabbix-dev-mysql`, whatever `.env` says), waits for all four
 containers to be healthy, then logs in through the Zabbix API and reads the built-in "Zabbix server" host.
-It leaves the stack running afterwards (`podman compose down` to stop it).
+It also registers the proxy through the API and requires it to receive its configuration from the server
+and show a recent `lastaccess` — "healthy" only means a PID file exists, so it says nothing about the proxy
+actually working. It leaves the stack running afterwards (`podman compose down` to stop it).
 
 All scripts use Podman by default; set `CONTAINER_ENGINE=docker` to use Docker instead (the GitHub
 Actions workflow does).
@@ -65,7 +107,7 @@ the latest CVE database — edit the cron to change that), and on manual dispatc
 | Job | What it does |
 |---|---|
 | `lint` | Advisory only: hadolint on the four Dockerfiles, shellcheck on the scripts. Never blocks. |
-| `verify` | `scripts/ci-pipeline.sh` (PHPUnit, build the 4 images, Trivy — CRITICAL findings block), then `scripts/smoke-test.sh`. |
+| `verify` | `scripts/ci-pipeline.sh` (PHPUnit, build the 4 images, Trivy — CRITICAL findings block), then `scripts/test-proxy-entrypoint.sh` and `scripts/smoke-test.sh`. |
 | `publish` | After approval on the `production` environment: rebuilds the images, re-scans exactly what is about to be pushed, pushes to Docker Hub (`scripts/build-images.sh` → `security-scan.sh` → `push-images.sh`), signs each image with cosign (keyless) and attaches a CycloneDX SBOM. Skipped for pull requests. |
 
 Before `publish` can run, this repository's GitHub settings need a one-time setup (a workflow file

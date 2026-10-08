@@ -3,6 +3,10 @@
 # dev-mysql and checks that:
 #   - zabbix-server / zabbix-web / zabbix-agent2 / zabbix-proxy all reach "healthy"
 #   - zabbix-server and zabbix-proxy actually finish starting up (main process log line)
+#   - the proxy really talks to the server: it is registered through the API, picks up its configuration
+#     (after the documented `zabbix_server -R` / `zabbix_proxy -R config_cache_reload`, which must work
+#     without -c) and shows a recent lastaccess. "healthy" only means a PID file exists, so by itself it
+#     says nothing about the proxy being usable.
 #   - the web frontend answers, and the JSON-RPC API can log in and read from the database — this is the
 #     path through PHP 8, the frontend code this project migrated, into MySQL
 #
@@ -20,11 +24,15 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# .env supplies defaults only: anything already exported by the caller (ZABBIX_IMAGE_TAG=..., CONTAINER_ENGINE=...)
+# wins over it, so a specific build can be tested without editing .env.
 if [ -f .env ]; then
+  _caller_env="$(export -p)"
   set -a
   # shellcheck disable=SC1091
   source .env
   set +a
+  eval "${_caller_env}"
 fi
 
 ENGINE="${CONTAINER_ENGINE:-podman}"
@@ -151,6 +159,47 @@ hosts_response="$(api "{\"jsonrpc\":\"2.0\",\"method\":\"host.get\",\"params\":{
 grep -q '"host":"Zabbix server"' <<<"${hosts_response}" \
   || fail "host.get did not return the built-in 'Zabbix server' host: ${hosts_response}"
 echo "host.get returned the built-in 'Zabbix server' host (database read ok)"
+
+echo ""
+echo "=================================================================="
+echo "Proxy -> server link (register the proxy, reload config without -c, expect configuration + lastaccess)"
+echo "=================================================================="
+# The proxy was started together with everything else, before it existed on the server, so its first
+# configuration request was refused; that is the normal situation after registering a proxy, and the runbook
+# for it is a reload on both sides. Neither command is given -c: that they work as is, like in the official
+# images, is part of what is tested.
+proxy_name="${ZBX_PROXY_HOSTNAME:-zabbix-proxy-sqlite3}"
+
+proxy_get="$(api "{\"jsonrpc\":\"2.0\",\"method\":\"proxy.get\",\"params\":{\"output\":[\"proxyid\"],\"filter\":{\"host\":\"${proxy_name}\"}},\"auth\":\"${token}\",\"id\":4}")" \
+  || fail "proxy.get request failed"
+if ! grep -q '"proxyid"' <<<"${proxy_get}"; then
+  create_response="$(api "{\"jsonrpc\":\"2.0\",\"method\":\"proxy.create\",\"params\":{\"host\":\"${proxy_name}\",\"status\":5},\"auth\":\"${token}\",\"id\":5}")" \
+    || fail "proxy.create request failed"
+  grep -q '"proxyids"' <<<"${create_response}" || fail "proxy.create did not register '${proxy_name}': ${create_response}"
+  echo "registered proxy '${proxy_name}' on the server"
+else
+  echo "proxy '${proxy_name}' is already registered"
+fi
+
+reload="$("${ENGINE}" exec zabbix-server zabbix_server -R config_cache_reload 2>&1)" \
+  || fail "zabbix_server -R config_cache_reload (without -c) failed: ${reload}"
+echo "zabbix_server -R config_cache_reload: ${reload}"
+reload="$("${ENGINE}" exec zabbix-proxy zabbix_proxy -R config_cache_reload 2>&1)" \
+  || fail "zabbix_proxy -R config_cache_reload (without -c) failed: ${reload}"
+echo "zabbix_proxy -R config_cache_reload: ${reload}"
+
+wait_for "zabbix-proxy to receive its configuration from the server" \
+  log_contains zabbix-proxy 'received configuration data from server'
+
+proxy_lastaccess_is_recent() {
+  local response lastaccess now
+  response="$(api "{\"jsonrpc\":\"2.0\",\"method\":\"proxy.get\",\"params\":{\"output\":[\"lastaccess\"],\"filter\":{\"host\":\"${proxy_name}\"}},\"auth\":\"${token}\",\"id\":6}")" || return 1
+  lastaccess="$(sed -n 's/.*"lastaccess":"\([0-9]*\)".*/\1/p' <<<"${response}")"
+  [ -n "${lastaccess}" ] && [ "${lastaccess}" -gt 0 ] || return 1
+  now="$("${ENGINE}" exec zabbix-server date +%s)" || return 1
+  [ $(( now - lastaccess )) -lt 60 ]
+}
+wait_for "proxy.get to report a recent lastaccess for '${proxy_name}'" proxy_lastaccess_is_recent
 
 echo ""
 echo "=================================================================="

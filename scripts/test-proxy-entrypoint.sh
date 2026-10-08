@@ -10,7 +10,7 @@
 #   CONTAINER_ENGINE=podman    # "docker" on GitHub Actions
 #   PROXY_IMAGE / SERVER_IMAGE / AGENT2_IMAGE   override the images under test
 set -uo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 # .env supplies defaults only: anything already exported by the caller (ZABBIX_IMAGE_TAG=..., CONTAINER_ENGINE=...)
 # wins over it, so a specific build can be tested without editing .env.
@@ -60,6 +60,8 @@ trap 'cleanup; rm -rf "${WORK}"' EXIT
 dry() {
   local name="$1"
   shift
+  # The script below runs inside the container, so it is deliberately single-quoted.
+  # shellcheck disable=SC2016
   "${ENGINE}" run --rm --label "${LABEL}" "$@" --entrypoint sh "${PROXY_IMAGE}" -c '
     mkdir -p /tmp/stub \
       && printf "#!/bin/sh\ncat /etc/zabbix/zabbix_proxy.conf\n" > /tmp/stub/zabbix_proxy \
