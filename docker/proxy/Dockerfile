@@ -61,7 +61,9 @@ RUN apk add --no-cache \
 		net-snmp-libs \
 		fping \
 		tzdata \
-		ca-certificates
+		ca-certificates \
+	&& apk upgrade --no-cache zlib
+# ^ the base layer already ships zlib 1.3.2-r0 (CVE-2026-85091, fixed in 1.3.2-r1); see docker/server/Dockerfile.
 
 # Same UID/GID 1997 convention as the other 3 images (see docker/server/Dockerfile).
 RUN addgroup -g 1997 -S zabbix \

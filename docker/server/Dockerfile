@@ -77,7 +77,10 @@ RUN apk add --no-cache \
 		fping \
 		tzdata \
 		ca-certificates \
-		su-exec
+		su-exec \
+	&& apk upgrade --no-cache zlib
+# ^ the base layer already ships zlib 1.3.2-r0 (CVE-2026-85091, fixed in 1.3.2-r1), so the add above leaves
+# it alone; upgrading just that package keeps the rest of the versions reproducible. Same in the other images.
 
 # UID/GID 1997 (not 101) — build-and-test found 101 collides with nginx's own group in the web image;
 # kept consistent across all three images even though this one doesn't install nginx.
