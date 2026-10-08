@@ -43,7 +43,12 @@ RUN touch aclocal.m4 \
 # dependency-tracking makefile fragments in this container filesystem (a known autotools issue tied to
 # how file timestamps travel through COPY/layer extraction); irrelevant anyway for a one-shot image
 # build with no incremental rebuilds, and configure's own error message names this as the fix.
+# --sysconfdir=/etc/zabbix: where entrypoint.sh writes zabbix_server.conf, and so the compiled-in default
+# config path. Without it the default is /usr/local/etc/zabbix_server.conf, and `zabbix_server -R <option>`
+# (config_cache_reload, log_level_increase, ...) fails unless every call also passes -c — unlike the official
+# image, where `docker exec <container> zabbix_server -R config_cache_reload` just works.
 RUN sh ./configure \
+		--sysconfdir=/etc/zabbix \
 		--disable-dependency-tracking \
 		--enable-server \
 		--enable-ipv6 \
@@ -56,6 +61,10 @@ RUN sh ./configure \
 
 FROM alpine:3.24
 
+# fping: ICMP checks (icmpping, icmppingsec, icmppingloss). Zabbix runs /usr/sbin/fping, its default FpingLocation,
+# and marks the item unsupported when it is missing. Alpine's package carries cap_net_raw, so it works as the zabbix
+# user once the container is allowed NET_RAW (compose.yml adds it: Docker's default capabilities include it, Podman's
+# do not).
 RUN apk add --no-cache \
 		mariadb-connector-c \
 		pcre \
@@ -65,6 +74,7 @@ RUN apk add --no-cache \
 		libxml2 \
 		libcurl \
 		net-snmp-libs \
+		fping \
 		tzdata \
 		ca-certificates \
 		su-exec

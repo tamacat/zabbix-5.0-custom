@@ -26,7 +26,9 @@ COPY sources/zabbix-5.0.47/ /build/
 RUN touch aclocal.m4 \
 	&& find . \( -name configure -o -name config.h.in -o -name Makefile.in \) -exec touch {} +
 
-RUN sh ./configure --disable-dependency-tracking --enable-agent2 --with-openssl
+# --sysconfdir=/etc/zabbix: see docker/server/Dockerfile — the compiled-in default config path, so that
+# `zabbix_agent2 -R <option>` works without -c.
+RUN sh ./configure --sysconfdir=/etc/zabbix --disable-dependency-tracking --enable-agent2 --with-openssl
 
 # go-sqlite3 (a transitive plugin dependency of zabbix_agent2 itself, not excluded by targeting only
 # ./cmd/zabbix_agent2) uses glibc-only pread64/pwrite64/off64_t symbol names that musl's headers do not
