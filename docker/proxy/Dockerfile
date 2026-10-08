@@ -33,7 +33,10 @@ RUN touch aclocal.m4 \
 # that file's comments for why. --with-sqlite3 (not --with-mysql) is the one deliberate difference:
 # zabbix-proxy-sqlite3 stores its local buffer in a SQLite file, matching the official
 # zabbix/zabbix-proxy-sqlite3 image's own database choice.
+# --sysconfdir=/etc/zabbix: see docker/server/Dockerfile — makes `zabbix_proxy -R config_cache_reload` work
+# without -c, as in the official image.
 RUN sh ./configure \
+		--sysconfdir=/etc/zabbix \
 		--disable-dependency-tracking \
 		--enable-proxy \
 		--enable-ipv6 \
@@ -46,6 +49,7 @@ RUN sh ./configure \
 
 FROM alpine:3.24
 
+# fping: ICMP checks run through the proxy (see docker/server/Dockerfile for the NET_RAW requirement).
 RUN apk add --no-cache \
 		sqlite-libs \
 		pcre \
@@ -55,8 +59,11 @@ RUN apk add --no-cache \
 		libxml2 \
 		libcurl \
 		net-snmp-libs \
+		fping \
 		tzdata \
-		ca-certificates
+		ca-certificates \
+	&& apk upgrade --no-cache zlib
+# ^ the base layer already ships zlib 1.3.2-r0 (CVE-2026-85091, fixed in 1.3.2-r1); see docker/server/Dockerfile.
 
 # Same UID/GID 1997 convention as the other 3 images (see docker/server/Dockerfile).
 RUN addgroup -g 1997 -S zabbix \
@@ -68,8 +75,11 @@ COPY --from=builder /build/conf/zabbix_proxy.conf /etc/zabbix/zabbix_proxy.conf.
 # db_data holds the SQLite buffer file — the one piece of local state this component actually owns
 # (unlike server/web/agent2, which are stateless besides the mounted config/script dirs). enc is TLS
 # material (matching server's own enc dir) for the proxy->server link; externalscripts mirrors server's
-# own optional custom-check support.
-RUN mkdir -p /etc/zabbix /var/lib/zabbix/db_data /var/lib/zabbix/enc /var/lib/zabbix/externalscripts /run/zabbix \
+# own optional custom-check support. enc_internal is where entrypoint.sh puts TLS material given as plain
+# values (ZBX_TLSPSK, ZBX_TLSCERT, ...) rather than as files in enc; modules is the LoadModulePath for
+# ZBX_LOADMODULE.
+RUN mkdir -p /etc/zabbix /var/lib/zabbix/db_data /var/lib/zabbix/enc /var/lib/zabbix/enc_internal \
+		/var/lib/zabbix/externalscripts /var/lib/zabbix/modules /run/zabbix \
 	&& chown -R zabbix:zabbix /etc/zabbix /var/lib/zabbix /run/zabbix
 
 COPY docker/proxy/entrypoint.sh /usr/local/bin/entrypoint.sh

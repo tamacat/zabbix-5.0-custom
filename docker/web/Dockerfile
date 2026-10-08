@@ -16,11 +16,12 @@ ARG PHP_PKG=php83
 ARG PHP_INI_DIR=/etc/php83
 
 # Refresh the package index and take any already-published security fix for openssl (libssl3/
-# libcrypto3) ahead of installing everything else. The alpine:3.24 base layer is a point-in-time
+# libcrypto3) and zlib ahead of installing everything else. The alpine:3.24 base layer is a point-in-time
 # snapshot; apk update/upgrade pulls whatever Alpine's v3.24 stable branch has published since,
-# independent of when that base layer was last pulled. Targeted (not a blanket `apk upgrade`) to
-# keep the rest of the image's package versions reproducible.
-RUN apk update && apk upgrade --no-cache libssl3 libcrypto3
+# independent of when that base layer was last pulled (zlib 1.3.2-r0 in the base layer carries
+# CVE-2026-85091, fixed in 1.3.2-r1). Targeted (not a blanket `apk upgrade`) to keep the rest of the
+# image's package versions reproducible.
+RUN apk update && apk upgrade --no-cache libssl3 libcrypto3 zlib
 
 # PHP extensions per requirements.md FR3.3 (ldap intentionally excluded — see FR2.1/CFrontendSetupTest.php).
 RUN apk add --no-cache \

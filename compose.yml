@@ -46,6 +46,10 @@ services:
       dockerfile: docker/server/Dockerfile
     image: localhost/zabbix-server-mysql-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-custom}
     container_name: zabbix-server
+    # fping (ICMP checks) needs a raw socket. Docker grants NET_RAW by default, Podman does not, so it is asked
+    # for explicitly; without it icmpping items on the server/proxy fail with "Operation not permitted".
+    cap_add:
+      - NET_RAW
     networks:
       - zbxnet
     environment:
@@ -130,6 +134,8 @@ services:
       dockerfile: docker/proxy/Dockerfile
     image: localhost/zabbix-proxy-sqlite3-php8migration:${ZABBIX_IMAGE_TAG:-5.0.47-custom}
     container_name: zabbix-proxy
+    cap_add:
+      - NET_RAW
     networks:
       - zbxnet
     depends_on:

@@ -2,7 +2,8 @@
 # own scripts.
 #
 #   lint     advisory hadolint + shellcheck (never blocks)
-#   verify   PHPUnit -> build the 4 images -> Trivy gate (CRITICAL blocks) -> full-stack smoke test
+#   verify   PHPUnit -> build the 4 images -> Trivy gate (CRITICAL blocks) -> proxy entrypoint tests ->
+#            full-stack smoke test (incl. the proxy really reaching the server)
 #   publish  waits for approval on the "production" environment, then rebuilds, re-scans the exact images
 #            about to go out, pushes them to Docker Hub, signs them (cosign, keyless) and attaches an SBOM
 #
@@ -104,6 +105,11 @@ jobs:
       # (full report, CRITICAL findings block).
       - name: Test, build and scan (scripts/ci-pipeline.sh)
         run: ./scripts/ci-pipeline.sh
+
+      # Needs no server: how the proxy's environment variables become its configuration, and that the
+      # runtime-control commands work without -c as in the official images.
+      - name: Proxy entrypoint and runtime-control tests (scripts/test-proxy-entrypoint.sh)
+        run: ./scripts/test-proxy-entrypoint.sh
 
       - name: Full-stack smoke test (scripts/smoke-test.sh)
         run: ./scripts/smoke-test.sh

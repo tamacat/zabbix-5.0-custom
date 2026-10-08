@@ -26,7 +26,9 @@ COPY sources/zabbix-5.0.47/ /build/
 RUN touch aclocal.m4 \
 	&& find . \( -name configure -o -name config.h.in -o -name Makefile.in \) -exec touch {} +
 
-RUN sh ./configure --disable-dependency-tracking --enable-agent2 --with-openssl
+# --sysconfdir=/etc/zabbix: see docker/server/Dockerfile — the compiled-in default config path, so that
+# `zabbix_agent2 -R <option>` works without -c.
+RUN sh ./configure --sysconfdir=/etc/zabbix --disable-dependency-tracking --enable-agent2 --with-openssl
 
 # go-sqlite3 (a transitive plugin dependency of zabbix_agent2 itself, not excluded by targeting only
 # ./cmd/zabbix_agent2) uses glibc-only pread64/pwrite64/off64_t symbol names that musl's headers do not
@@ -53,7 +55,12 @@ FROM alpine:3.24
 
 # zabbix_agent2 links against these as shared libraries (-lssl -lcrypto -lz -lpcre in the build stage's
 # link command); the runtime image needs their .so runtime packages, not just the builder's *-dev ones.
-RUN apk add --no-cache ca-certificates tzdata openssl libcrypto3 zlib pcre
+#
+# `apk upgrade zlib` because the alpine:3.24 base layer is a snapshot that already contains zlib, so the add
+# above would leave it at 1.3.2-r0 (CVE-2026-85091, fixed in 1.3.2-r1); upgrading just that package keeps
+# the rest of the versions reproducible. Same in the other images.
+RUN apk add --no-cache ca-certificates tzdata openssl libcrypto3 zlib pcre \
+	&& apk upgrade --no-cache zlib
 
 # UID/GID 1997 (not 101) — build-and-test found 101 collides with nginx's own group in the web image;
 # kept consistent across all three images even though this one doesn't install nginx.
