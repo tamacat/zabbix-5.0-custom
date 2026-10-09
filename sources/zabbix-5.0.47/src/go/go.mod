@@ -2,6 +2,10 @@ module zabbix.com
 
 go 1.26.0
 
+// Go 1.26.9 fixes the standard-library advisories published 2026-10-08 (GO-2026-6599 ... 6617); Alpine 3.24
+// still ships 1.26.8, so the go command fetches this toolchain itself. A minimum, not a pin: a newer local Go wins.
+toolchain go1.26.9
+
 require (
 	github.com/dustin/gomemcached v0.0.0-20160817010731-a2284a01c143
 	github.com/fsnotify/fsnotify v1.4.9
@@ -17,7 +21,7 @@ require (
 	github.com/miekg/dns v1.1.43
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
 	github.com/omeid/go-yarn v0.0.1
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 )
 
@@ -32,9 +36,9 @@ require (
 	github.com/jackc/pgtype v1.14.0 // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	golang.org/x/crypto v0.56.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect

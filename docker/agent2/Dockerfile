@@ -1,8 +1,10 @@
 # Zabbix agent2 — Alpine 3.24, built from the existing (unmodified) sources/zabbix-5.0.47/src/go Go
 # sources [FR5.1]. This migration does not change zabbix_agent2's Go code — only its build/runtime
-# container. The go.mod's "go 1.19" is a minimum-compatibility floor, not a pin — Alpine 3.24's `go`
-# package (whatever recent version that is) builds this module fine as a newer, backward-compatible
-# toolchain.
+# container (and src/go/go.mod/go.sum: dependency versions and the Go toolchain minimum, to pick up
+# security fixes). The go.mod's `go` and `toolchain` lines are minimums, not pins: Alpine 3.24's `go`
+# package builds the module, and when go.mod asks for a newer toolchain than Alpine ships (1.26.9 vs
+# Alpine's 1.26.8 at the time of writing) the go command downloads it, which needs network access during
+# the build — as the module downloads already do.
 #
 # Build context is the repository root (see compose.yml).
 
@@ -18,6 +20,11 @@ FROM alpine:3.24 AS builder
 # followed by `make` in src/go/ (using ITS generated Makefile, not a bare `go build`) is the actually
 # correct build path, not an invention.
 RUN apk add --no-cache go build-base git autoconf automake libtool pcre-dev openssl-dev zlib-dev
+
+# Alpine's go package defaults to GOTOOLCHAIN=local (its go.env), under which the `toolchain` line in
+# src/go/go.mod is ignored and the build silently stays on Alpine's older Go. `auto` lets the go command fetch
+# the toolchain go.mod asks for, and still prefers a newer local one once Alpine ships it.
+ENV GOTOOLCHAIN=auto
 
 WORKDIR /build
 COPY sources/zabbix-5.0.47/ /build/
