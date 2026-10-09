@@ -77,7 +77,8 @@ works.
 ./scripts/ci-pipeline.sh     # build + PHPUnit + podman compose build + Trivy scan
 ./scripts/build-images.sh    # build + tag for publishing (see Docker Hub below)
 ./scripts/push-images.sh     # push the tags build-images.sh produced (requires `podman login docker.io` first)
-./scripts/security-scan.sh   # Trivy scan only, against whatever images are already built locally
+./scripts/security-scan.sh   # Trivy scan of the images + govulncheck on the Go binary, against whatever is already built locally
+./scripts/govulncheck-scan.sh   # just the Go vulnerability check of zabbix_agent2 (security-scan.sh runs it too)
 ./scripts/smoke-test.sh      # bring the stack up on the bundled dev-mysql and exercise web -> PHP 8 -> MySQL, and proxy -> server
 ./scripts/test-proxy-entrypoint.sh   # proxy env-variable handling and runtime-control commands (needs no server)
 ```
@@ -87,6 +88,16 @@ works.
 re-check the images you already have whenever you hear about a new CVE, without rebuilding.
 Set `SKIP_DB_UPDATE=1` to skip refreshing Trivy's vulnerability database first (faster, but the
 results may miss anything published since your last scan).
+
+`security-scan.sh` also runs `govulncheck-scan.sh`, which extracts `zabbix_agent2` (the only Go program) from
+the agent2 image and checks it with [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
+against the Go vulnerability database. Trivy's database trails that one by hours to a day, and the Go standard
+library compiled into the binary is where new advisories land first: on 2026-10-08 govulncheck found 12 that
+Trivy still called clean. Policy: **a vulnerability with a published fix fails the check** (the fix is a bump of
+the `toolchain` line or a module in `sources/zabbix-5.0.47/src/go/go.mod` plus a rebuild); one without a fix yet
+is only a warning. It runs in binary mode, i.e. it reports vulnerable code present in the binary whether or not
+agent2 calls it. It needs `govulncheck` on `PATH` (`go install golang.org/x/vuln/cmd/govulncheck@latest`); without
+it the check is skipped with a notice, unless `REQUIRE_GOVULNCHECK=1` (GitHub Actions sets it).
 
 `smoke-test.sh` needs the images built first. It always targets the bundled `dev-mysql` (it forces
 `COMPOSE_PROFILES=dev` and `DB_SERVER_HOST=zabbix-dev-mysql`, whatever `.env` says), waits for all four
@@ -107,7 +118,7 @@ the latest CVE database — edit the cron to change that), and on manual dispatc
 | Job | What it does |
 |---|---|
 | `lint` | Advisory only: hadolint on the four Dockerfiles, shellcheck on the scripts. Never blocks. |
-| `verify` | `scripts/ci-pipeline.sh` (PHPUnit, build the 4 images, Trivy — CRITICAL findings block), then `scripts/test-proxy-entrypoint.sh` and `scripts/smoke-test.sh`. |
+| `verify` | `scripts/ci-pipeline.sh` (PHPUnit, build the 4 images, Trivy — CRITICAL findings block — and govulncheck on agent2 — a Go vulnerability with a published fix blocks), then `scripts/test-proxy-entrypoint.sh` and `scripts/smoke-test.sh`. |
 | `publish` | After approval on the `production` environment: rebuilds the images, re-scans exactly what is about to be pushed, pushes to Docker Hub (`scripts/build-images.sh` → `security-scan.sh` → `push-images.sh`), signs each image with cosign (keyless) and attaches a CycloneDX SBOM. Skipped for pull requests. |
 
 Before `publish` can run, this repository's GitHub settings need a one-time setup (a workflow file
