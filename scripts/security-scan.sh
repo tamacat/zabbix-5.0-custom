@@ -10,8 +10,14 @@
 # Requires the 4 images to already be built (`podman compose build` / scripts/ci-pipeline.sh) and the
 # `trivy` CLI to be installed and on PATH. Set CONTAINER_ENGINE=docker to look for them in Docker.
 #
-# Exit code 0 = every image passed the blocking gate (CRITICAL == 0 across the board).
-# Exit code 1 = at least one image has a CRITICAL finding, OR an image is missing/couldn't be scanned.
+# After the Trivy scans it also runs scripts/govulncheck-scan.sh on the Go binary in the agent2 image: Trivy's
+# database lags the Go vulnerability database by hours to a day, and a fixable Go advisory fails this script
+# too (see that script for the policy). It is skipped, with a notice, when `govulncheck` is not installed,
+# unless REQUIRE_GOVULNCHECK=1 (GitHub Actions sets it).
+#
+# Exit code 0 = every image passed the blocking gate (CRITICAL == 0 across the board) and the Go check passed.
+# Exit code 1 = at least one image has a CRITICAL finding, a Go vulnerability with a published fix was found,
+#               OR an image is missing/couldn't be scanned.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -70,10 +76,18 @@ done
 
 echo ""
 echo "=================================================================="
+echo "Go vulnerability check (zabbix_agent2)"
+echo "=================================================================="
+if ! ./scripts/govulncheck-scan.sh; then
+  overall_status=1
+fi
+
+echo ""
+echo "=================================================================="
 if [ "${overall_status}" -eq 0 ]; then
-  echo "All images passed: zero CRITICAL findings."
+  echo "All images passed: zero CRITICAL findings, no fixable Go vulnerabilities."
 else
-  echo "FAILED: see above for the image(s) with CRITICAL findings (or missing images)."
+  echo "FAILED: see above for the image(s) with CRITICAL findings, fixable Go vulnerabilities, or missing images."
   echo "HIGH/MEDIUM/LOW findings do not block by themselves — compare them against the known"
   echo "baseline in aidlc/spaces/default/intents/260905-php8-migration/construction/ci-pipeline/quality-gates.md"
   echo "before treating a new one as acceptable."

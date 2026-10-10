@@ -1,0 +1,28 @@
+name: Install govulncheck
+description: Install a pinned govulncheck (the Go vulnerability checker) with a current stable Go toolchain.
+
+inputs:
+  version:
+    description: govulncheck version including the leading "v" (e.g. v1.8.0)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Only builds the tool. In binary mode govulncheck does not use this Go to judge the scanned binary; the
+    # vulnerability database itself is fetched live from vuln.go.dev on every run.
+    - uses: actions/setup-go@v7
+      with:
+        go-version: stable
+        cache: false
+
+    - name: Install and put on PATH
+      shell: bash
+      env:
+        GOVULNCHECK_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        bin="${RUNNER_TEMP}/govulncheck-bin"
+        GOBIN="${bin}" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+        echo "${bin}" >> "${GITHUB_PATH}"
+        "${bin}/govulncheck" -version
