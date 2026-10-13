@@ -31,7 +31,9 @@ fi
 # convenience variable for trusting a self-signed target's CA at the OS level — not part of the official
 # zabbix/zabbix-server-mysql image. Needs root, which is why this container does not drop to the zabbix
 # user until after this step (see the su-exec exec below).
-if [ -n "${TRUST_DB_CA_FILE:-}" ] && [ -f "${TRUST_DB_CA_FILE}" ]; then
+if [ -n "${TRUST_DB_CA_FILE:-}" ] && [ -f "${TRUST_DB_CA_FILE}" ] && [ "$(id -u)" != "0" ]; then
+	echo "**** WARNING: TRUST_DB_CA_FILE is ignored: trusting a CA needs root and this container runs as uid $(id -u)." >&2
+elif [ -n "${TRUST_DB_CA_FILE:-}" ] && [ -f "${TRUST_DB_CA_FILE}" ]; then
 	echo "**** Trusting DB server CA certificate from ${TRUST_DB_CA_FILE}..."
 	cp "${TRUST_DB_CA_FILE}" /usr/local/share/ca-certificates/db-server-ca.crt
 	update-ca-certificates
@@ -80,4 +82,11 @@ if [ -n "${ZBX_DBTLSCONNECT:-}" ]; then
 fi
 
 echo "**** Starting Zabbix server..."
-exec su-exec zabbix zabbix_server --foreground -c "${CONFIG_FILE}"
+# Started as root (the image default) it drops to the zabbix user here. Started as a non-root user already (an
+# ECS/Fargate task definition's `user`, Kubernetes runAsUser, `--user`) there is nothing to drop, and su-exec
+# would fail with "setgroups: Operation not permitted" — so run the daemon directly. That user must be able to
+# write /etc/zabbix and /run/zabbix, i.e. be uid 1997 (zabbix) or have those directories made writable for it.
+if [ "$(id -u)" = "0" ]; then
+	exec su-exec zabbix zabbix_server --foreground -c "${CONFIG_FILE}"
+fi
+exec zabbix_server --foreground -c "${CONFIG_FILE}"

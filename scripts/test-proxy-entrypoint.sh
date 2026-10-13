@@ -210,6 +210,15 @@ for spec in "proxy:${PROXY_IMAGE}" "server:${SERVER_IMAGE}"; do
   else bad "${name}: fping as the zabbix user failed: ${ping_out}"; fi
 done
 
+echo "== the server starts when the container is already non-root (ECS/Fargate task user, runAsUser) =="
+# su-exec cannot switch user without root ("setgroups: Operation not permitted"), so the entrypoint must run the
+# daemon directly. The database does not exist: the server starting up and then failing to connect is enough.
+srv_out="$("${ENGINE}" run --rm --label "${LABEL}" --user zabbix -e MYSQL_PASSWORD=x -e DB_SERVER_HOST=zbxept-nodb "${SERVER_IMAGE}" 2>&1 | head -60 || true)"
+if grep -q 'su-exec' <<<"${srv_out}"; then bad "server as a non-root user fails in su-exec: $(grep su-exec <<<"${srv_out}" | head -1)"
+elif grep -q 'Starting Zabbix Server' <<<"${srv_out}"; then ok "server as a non-root user starts zabbix_server directly"
+else bad "server as a non-root user did not start: $(tail -2 <<<"${srv_out}" | tr '
+' ' ')"; fi
+
 out="$("${ENGINE}" exec zbxept-defaults zabbix_proxy -R config_cache_reload 2>&1)"
 if grep -q 'command sent successfully' <<<"${out}"; then ok "zabbix_proxy -R config_cache_reload (no -c) on a running proxy"
 else bad "zabbix_proxy -R config_cache_reload failed: ${out}"; fi
