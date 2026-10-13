@@ -8,7 +8,7 @@
 # (scripts/ci-pipeline.sh or `<engine> compose build`). GitHub Actions runs this after ci-pipeline.sh.
 #
 #   CONTAINER_ENGINE=podman    # "docker" on GitHub Actions
-#   PROXY_IMAGE / SERVER_IMAGE / AGENT2_IMAGE   override the images under test
+#   PROXY_IMAGE / SERVER_IMAGE / AGENT2_IMAGE / WEB_IMAGE   override the images under test
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
@@ -28,6 +28,7 @@ TAG="${ZABBIX_IMAGE_TAG:-5.0.47-custom}"
 PROXY_IMAGE="${PROXY_IMAGE:-localhost/zabbix-proxy-sqlite3-php8migration:${TAG}}"
 SERVER_IMAGE="${SERVER_IMAGE:-localhost/zabbix-server-mysql-php8migration:${TAG}}"
 AGENT2_IMAGE="${AGENT2_IMAGE:-localhost/zabbix-agent2-php8migration:${TAG}}"
+WEB_IMAGE="${WEB_IMAGE:-localhost/zabbix-web-nginx-mysql-php8migration:${TAG}}"
 CONF=/etc/zabbix/zabbix_proxy.conf
 LABEL=zbx-entrypoint-test
 export MSYS_NO_PATHCONV=1
@@ -209,6 +210,36 @@ for spec in "proxy:${PROXY_IMAGE}" "server:${SERVER_IMAGE}"; do
   if grep -q '0% loss' <<<"${ping_out}"; then ok "${name}: the zabbix user can ping 127.0.0.1 with fping"
   else bad "${name}: fping as the zabbix user failed: ${ping_out}"; fi
 done
+
+echo "== the server image runs as the official uid/gid by default (no root, no su-exec) =="
+server_id="$("${ENGINE}" run --rm --label "${LABEL}" --entrypoint id "${SERVER_IMAGE}" 2>&1)"
+if grep -q '^uid=1997(zabbix) gid=1995(zabbix)' <<<"${server_id}"; then ok "server default user is uid=1997 gid=1995 (as in zabbix/zabbix-server-mysql)"
+else bad "server default user is not uid 1997 / gid 1995: ${server_id}"; fi
+
+echo "== graph text can show Japanese =="
+# A glyph the font lacks is drawn as the same "missing" box whatever the character, so two different kanji that
+# render differently prove the font has real glyphs. Uses the font name the UI is configured with.
+font_result="$("${ENGINE}" run --rm -i --label "${LABEL}" --entrypoint sh "${WEB_IMAGE}" -s <<'EOS' 2>&1
+cd /usr/share/zabbix
+name=$(awk -F"'" '/^define\(.ZBX_GRAPH_FONT_NAME/ {print $4}' include/defines.inc.php)
+cat > /tmp/g.php <<'PHP'
+<?php
+function glyph($font, $ch) {
+	$im = imagecreate(60, 60);
+	imagecolorallocate($im, 255, 255, 255);
+	imagettftext($im, 30, 0, 5, 45, imagecolorallocate($im, 0, 0, 0), $font, $ch);
+	ob_start();
+	imagepng($im);
+	return md5(ob_get_clean());
+}
+$font = $argv[1];
+echo glyph($font, "日") !== glyph($font, "語") ? "real-glyphs" : "boxes";
+PHP
+echo "${name} $(php83 /tmp/g.php "/usr/share/zabbix/assets/fonts/${name}.ttf")"
+EOS
+)"
+if grep -q 'real-glyphs$' <<<"${font_result}"; then ok "web: the graph font (${font_result%% *}) has Japanese glyphs"
+else bad "web: the graph font shows Japanese as boxes or could not be checked: ${font_result}"; fi
 
 echo "== the server starts when the container is already non-root (ECS/Fargate task user, runAsUser) =="
 # su-exec cannot switch user without root ("setgroups: Operation not permitted"), so the entrypoint must run the
