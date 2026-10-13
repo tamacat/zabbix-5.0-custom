@@ -82,9 +82,9 @@ RUN apk add --no-cache \
 # ^ the base layer already ships zlib 1.3.2-r0 (CVE-2026-85091, fixed in 1.3.2-r1), so the add above leaves
 # it alone; upgrading just that package keeps the rest of the versions reproducible. Same in the other images.
 
-# UID/GID 1997 (not 101) — build-and-test found 101 collides with nginx's own group in the web image;
-# kept consistent across all three images even though this one doesn't install nginx.
-RUN addgroup -g 1997 -S zabbix \
+# UID 1997 / GID 1995, as in the official zabbix/zabbix-server-mysql image (not 101: that collides with
+# nginx's own group in the web image).
+RUN addgroup -g 1995 -S zabbix \
 	&& adduser -D -S -H -u 1997 -G zabbix -s /sbin/nologin zabbix
 
 COPY --from=builder /build/src/zabbix_server/zabbix_server /usr/sbin/zabbix_server
@@ -92,17 +92,20 @@ COPY --from=builder /build/conf/zabbix_server.conf /etc/zabbix/zabbix_server.con
 
 RUN mkdir -p /etc/zabbix /var/lib/zabbix/alertscripts /var/lib/zabbix/externalscripts /var/lib/zabbix/enc \
 		/var/lib/zabbix/export /var/lib/zabbix/modules /run/zabbix \
-	&& chown -R zabbix:zabbix /etc/zabbix /var/lib/zabbix /run/zabbix
+	&& chown -R zabbix:root /etc/zabbix /var/lib/zabbix /run/zabbix \
+	&& chmod -R g=u /etc/zabbix /var/lib/zabbix /run/zabbix
+# ^ group root with the owner's rights, as in the official image: a platform that runs the container with another
+# uid but gid 0 (OpenShift, some ECS/Kubernetes setups) can still write the config and the PID file.
 
 COPY docker/server/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 VOLUME ["/var/lib/zabbix/alertscripts", "/var/lib/zabbix/externalscripts", "/var/lib/zabbix/enc"]
 
-# build-and-test: no `USER zabbix` here (unlike web/agent2) — entrypoint.sh needs root briefly to run
-# update-ca-certificates when a verification database's CA is mounted in (see entrypoint.sh), then drops
-# to the zabbix user itself via su-exec before exec'ing zabbix_server. The daemon process still never
-# runs as root.
+# Runs as the zabbix user from the start, like the official image. (Earlier builds started as root and dropped
+# to zabbix with su-exec, which fails when the platform already runs the container as another user, e.g. an
+# ECS/Fargate task `user`. entrypoint.sh still copes with being started as root, e.g. `--user 0`.)
+USER 1997
 
 # Process-liveness health check via the PID file entrypoint.sh configures [reliability-design.md /
 # monitoring-design.md — server: PIDファイルの存在確認によるプロセス生存確認].
