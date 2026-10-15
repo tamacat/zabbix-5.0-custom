@@ -32,7 +32,10 @@ fi
 # zabbix/zabbix-server-mysql image. Needs root, which is why this container does not drop to the zabbix
 # user until after this step (see the su-exec exec below).
 if [ -n "${TRUST_DB_CA_FILE:-}" ] && [ -f "${TRUST_DB_CA_FILE}" ] && [ "$(id -u)" != "0" ]; then
-	echo "**** WARNING: TRUST_DB_CA_FILE is ignored: trusting a CA needs root and this container runs as uid $(id -u)." >&2
+	# The image runs as uid 1997 by default, so this is the normal case; it only matters with TLS to the database.
+	if [ -n "${ZBX_DBTLSCONNECT:-}" ]; then
+		echo "**** WARNING: TRUST_DB_CA_FILE is ignored: trusting a CA needs root and this container runs as uid $(id -u). Use ZBX_DBTLSCAFILE (a path the zabbix user can read) instead." >&2
+	fi
 elif [ -n "${TRUST_DB_CA_FILE:-}" ] && [ -f "${TRUST_DB_CA_FILE}" ]; then
 	echo "**** Trusting DB server CA certificate from ${TRUST_DB_CA_FILE}..."
 	cp "${TRUST_DB_CA_FILE}" /usr/local/share/ca-certificates/db-server-ca.crt

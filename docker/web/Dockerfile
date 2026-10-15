@@ -25,6 +25,7 @@ RUN apk update && apk upgrade --no-cache libssl3 libcrypto3 zlib
 
 # PHP extensions per requirements.md FR3.3 (ldap intentionally excluded — see FR2.1/CFrontendSetupTest.php).
 RUN apk add --no-cache \
+		font-ipa \
 		nginx \
 		${PHP_PKG} \
 		${PHP_PKG}-fpm \
@@ -63,6 +64,11 @@ COPY docker/web/conf/zabbix.ini ${PHP_INI_DIR}/conf.d/99-zabbix.ini
 # ui/conf/zabbix.conf.php does not exist in source (only the .example ships) — entrypoint.sh generates the
 # real one at container start from environment variables, so it is never baked into the image.
 COPY --chown=zabbix:zabbix sources/zabbix-5.0.47/ui/ /usr/share/zabbix/
+
+# Graph text font with Japanese glyphs: ZBX_GRAPH_FONT_NAME is 'IPAPGothic' (include/defines.inc.php), looked up
+# as assets/fonts/IPAPGothic.ttf. The bundled DejaVuSans.ttf has no CJK glyphs, so Japanese item names, host
+# names and legends in graphs came out as boxes. font-ipa (IPA Gothic/Mincho, TTF) is installed above.
+RUN ln -s /usr/share/fonts/ipafont/ipagp.ttf /usr/share/zabbix/assets/fonts/IPAPGothic.ttf
 
 # These directories are empty in the Zabbix tarball, and git does not keep empty directories, so a checkout
 # (CI, a fresh clone) does not have them and the COPY above cannot bring them along. The frontend expects
