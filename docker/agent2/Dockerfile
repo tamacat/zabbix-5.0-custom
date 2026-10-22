@@ -2,8 +2,8 @@
 # sources [FR5.1]. This migration does not change zabbix_agent2's Go code — only its build/runtime
 # container (and src/go/go.mod/go.sum: dependency versions and the Go toolchain minimum, to pick up
 # security fixes). The go.mod's `go` and `toolchain` lines are minimums, not pins: Alpine 3.24's `go`
-# package builds the module, and when go.mod asks for a newer toolchain than Alpine ships (1.26.9 vs
-# Alpine's 1.26.8 at the time of writing) the go command downloads it, which needs network access during
+# package builds the module, and when go.mod asks for a newer toolchain than Alpine ships (1.26.10 vs
+# Alpine's older one at the time of writing) the go command downloads it, which needs network access during
 # the build — as the module downloads already do.
 #
 # Build context is the repository root (see compose.yml).

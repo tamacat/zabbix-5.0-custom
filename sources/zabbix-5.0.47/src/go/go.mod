@@ -2,9 +2,10 @@ module zabbix.com
 
 go 1.26.0
 
-// Go 1.26.9 fixes the standard-library advisories published 2026-10-08 (GO-2026-6599 ... 6617); Alpine 3.24
-// still ships 1.26.8, so the go command fetches this toolchain itself. A minimum, not a pin: a newer local Go wins.
-toolchain go1.26.9
+// Go 1.26.10 fixes GO-2026-6809 (crypto/x509); 1.26.9 fixed the advisories published 2026-10-08 (GO-2026-6599
+// ... 6617). Alpine 3.24 ships an older Go, so the go command fetches this toolchain itself. A minimum, not a
+// pin: a newer local Go wins.
+toolchain go1.26.10
 
 require (
 	github.com/dustin/gomemcached v0.0.0-20160817010731-a2284a01c143
