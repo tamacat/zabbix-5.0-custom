@@ -139,6 +139,22 @@ cosign verify tamacat/zabbix-server-mysql:5.0.47-alpine-b20260926 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+### PHP in `zabbix-web` is built from source
+
+The `zabbix-web` image does not use Alpine's `php83` packages: PHP is compiled from the official tarball in
+`docker/web/Dockerfile` (pinned by version and SHA-256, which the build verifies), so a PHP security release can
+be taken the day it is published instead of whenever Alpine packages it. The extension set is the one the Alpine
+packages provided and Zabbix needs, and nothing else (no curl, sodium, sqlite3, ...).
+
+- **Trivy cannot see PHP's own vulnerabilities** (it matches Alpine packages, and this PHP is not one). Instead,
+  [`scripts/check-php-version.sh`](scripts/check-php-version.sh) compares the pinned `PHP_VERSION` with the latest
+  release of the same series on php.net, and the weekly CI run (`php-version` job) fails when a newer one exists.
+- **Updating PHP** is a manual step: take the new version and its SHA-256 from
+  `https://www.php.net/releases/index.php?json&version=8.3`, set `PHP_VERSION` and `PHP_SHA256` in
+  `docker/web/Dockerfile`, rebuild, and run `scripts/smoke-test.sh`.
+- The Alpine libraries PHP links against (libxml2, OpenSSL, libpng, ...) are still ordinary packages: the build's
+  `apk upgrade` keeps them current and Trivy scans them.
+
 ## Docker Hub
 
 Pre-built images are published here:

@@ -79,6 +79,19 @@ jobs:
         continue-on-error: true
         run: shellcheck scripts/*.sh docker/*/entrypoint.sh
 
+  php-version:
+    # The PHP in the web image is built from source, so Trivy cannot judge vulnerabilities in PHP itself.
+    # This checks, on a schedule, that no newer release of the pinned PHP series exists. It does not run
+    # on every commit, so a new PHP release does not turn unrelated changes red.
+    name: PHP version check (scheduled)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare the pinned PHP version with the latest release
+        run: ./scripts/check-php-version.sh
+
   verify:
     name: Verify (tests, build, scan, smoke test)
     runs-on: ubuntu-latest
