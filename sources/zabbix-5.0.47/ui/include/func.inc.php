@@ -911,7 +911,7 @@ function zbx_nl2br($str) {
 }
 
 function zbx_formatDomId($value) {
-	return str_replace(['[', ']'], ['_', ''], $value);
+	return str_replace(['[', ']'], ['_', ''], (string) $value);
 }
 
 /************* SORT *************/
