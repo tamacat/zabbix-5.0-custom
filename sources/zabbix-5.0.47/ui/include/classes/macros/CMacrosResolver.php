@@ -2015,7 +2015,7 @@ class CMacrosResolver extends CMacrosResolverGeneral {
 
 			foreach ($types as &$macro_types) {
 				$macro_types = array_map(function($macros_by_location) {
-					return array_keys(array_flip(call_user_func_array('array_merge', $macros_by_location)));
+					return array_keys(array_flip(array_merge(...array_values($macros_by_location))));
 				}, $macro_types);
 			}
 			unset($macro_types);

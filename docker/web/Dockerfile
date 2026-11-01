@@ -43,7 +43,10 @@ RUN curl -fsSL -o php.tar.xz "https://www.php.net/distributions/php-${PHP_VERSIO
 
 # Start from --disable-all and add only what Zabbix needs: the same set the Alpine php83 packages gave
 # (bcmath ctype dom fileinfo filter gd gettext iconv mbstring mysqli mysqlnd openssl session sockets
-# tokenizer xml xmlreader xmlwriter zlib, plus phar and opcache). The layout follows the Alpine packages
+# tokenizer xml xmlreader xmlwriter zlib, plus phar and opcache), plus simplexml. simplexml is needed by the
+# configuration XML import (ui/include/classes/import/readers/CXmlImportReader.php and
+# CItemGeneral.php call simplexml_load_string()); without it an XML import fails with "Call to undefined
+# function" (found by the Web UI test on 6.0). The layout follows the Alpine packages
 # (/etc/php83, php83 and php-fpm83) so entrypoint.sh and the conf.d files need no change.
 RUN ./configure \
 		--prefix=/usr \
@@ -59,7 +62,7 @@ RUN ./configure \
 		--with-gettext --with-iconv --enable-mbstring \
 		--enable-mysqlnd --with-mysqli=mysqlnd --with-mysql-sock=/run/mysqld/mysqld.sock \
 		--with-openssl --enable-session --enable-sockets --enable-tokenizer \
-		--enable-xml --enable-xmlreader --enable-xmlwriter --with-libxml \
+		--enable-xml --enable-xmlreader --enable-xmlwriter --enable-simplexml --with-libxml \
 		--with-zlib --with-external-pcre --enable-phar --enable-opcache \
 	&& make -j"$(nproc)" \
 	&& make install-cli install-fpm install-modules INSTALL_ROOT=/php-root \

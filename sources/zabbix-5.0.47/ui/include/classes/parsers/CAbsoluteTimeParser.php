@@ -95,7 +95,14 @@ class CAbsoluteTimeParser extends CParser {
 
 		$datetime = date_create($date);
 
-		if ($datetime === false || $datetime->getLastErrors()['warning_count'] != 0) {
+		if ($datetime === false) {
+			return false;
+		}
+
+		// Since PHP 8.2 getLastErrors() returns false when there are no warnings and no errors.
+		$errors = $datetime->getLastErrors();
+
+		if ($errors !== false && $errors['warning_count'] != 0) {
 			return false;
 		}
 
