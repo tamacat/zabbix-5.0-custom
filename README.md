@@ -81,7 +81,61 @@ works.
 ./scripts/govulncheck-scan.sh   # just the Go vulnerability check of zabbix_agent2 (security-scan.sh runs it too)
 ./scripts/smoke-test.sh      # bring the stack up on the bundled dev-mysql and exercise web -> PHP 8 -> MySQL, and proxy -> server
 ./scripts/test-proxy-entrypoint.sh   # proxy env-variable handling and runtime-control commands (needs no server)
+./scripts/ui-test.sh         # Web admin UI regression tests against a built, isolated stack (see below)
 ```
+
+### Web admin UI regression tests (`tests/ui/`)
+
+`smoke-test.sh` only checks that the stack comes up. `tests/ui/` drives a running stack over HTTP — no
+browser — and covers what this project changes: the source-built PHP (gd, gettext, xml, simplexml, sockets,
+mysqli), nginx (static files and the deny rules for the PHP source tree), the config `entrypoint.sh`
+generates from environment variables, and the graph font. It logs in, opens about 50 admin pages and edit
+forms with real data, exports and imports templates (XML and JSON), checks graph/icon PNGs and Japanese
+glyphs, the ja_JP translation, the web -> server link, and the user-profile/module-scan POSTs. Where a
+future PHP or nginx change breaks one screen, this is the test that sees it.
+
+```bash
+./scripts/ui-test.sh                 # build, start an isolated stack, test, tear down
+./scripts/ui-test.sh --no-build      # use already-built images (ZABBIX_IMAGE_TAG)
+./scripts/ui-test.sh --keep          # leave the stack up to look at it by hand
+./scripts/ui-test.sh -- -k export    # arguments after -- go to pytest
+```
+
+It needs Python 3 and `pytest` (`pip install pytest`). The stack runs under its own compose
+project name (`zbx5ui`) with its own container names and ports (`UI_TEST_WEB_PORT`, default 18050;
+`UI_TEST_MYSQL_PORT`, default 13305), so it does not touch the stack `compose.yml` starts by default (fixed
+container names `zabbix-*`, ports 8080/3306). Without `ZABBIX_URL` the tests are skipped, so a plain
+`python3 -m pytest tests` still passes without a stack. To point the suite at a stack you started yourself, set
+`ZABBIX_URL` (and `ZABBIX_ADMIN_USER` / `ZABBIX_ADMIN_PASSWORD` if the defaults were changed); test data is
+created through the API under the `zbx5ui-` prefix and removed afterwards.
+
+**Windows + Podman.** Podman cannot parse a bind mount that starts with a drive letter, so `docker compose up`
+fails with `incorrect volume format` and the `dev-mysql` schema is never loaded. Pass an override file that
+gives the bind mounts as paths inside the Podman VM (`C:\git\...` is `/mnt/c/git/...`) and run the script
+from Git Bash with path conversion off:
+
+```yaml
+# podman-win.override.yml (keep it outside the repository)
+services:
+  dev-mysql:
+    volumes:
+      - /mnt/c/git/docker/zabbix-5.0/zabbix-5.0-custom/docker/dev-mysql/init:/docker-entrypoint-initdb.d:ro
+      - /mnt/c/git/docker/zabbix-5.0/zabbix-5.0-custom/sources/zabbix-5.0.47/database/mysql:/zabbix-schema-src:ro
+      - /mnt/c/git/docker/zabbix-5.0/zabbix-5.0-custom/docker/dev-mysql/certs:/certs:ro
+  zabbix-server:
+    volumes:
+      - zbx-server-alertscripts:/var/lib/zabbix/alertscripts
+      - zbx-server-externalscripts:/var/lib/zabbix/externalscripts
+      - zbx-server-enc:/var/lib/zabbix/enc
+      - /mnt/c/git/docker/zabbix-5.0/zabbix-5.0-custom/docker/dev-mysql/certs:/var/lib/mysql-certs:ro
+```
+
+```bash
+MSYS_NO_PATHCONV=1 UI_TEST_COMPOSE_OVERRIDE=C:/path/to/podman-win.override.yml ./scripts/ui-test.sh
+```
+
+When a fix for a UI-visible regression is made, add its test there with a docstring that says what broke and
+why the static checks could not see it.
 
 `security-scan.sh` runs the same Trivy checks as `ci-pipeline.sh`'s Scan stage (in fact
 `ci-pipeline.sh` just calls it), but on its own — no build/test/package step first. Use it to
