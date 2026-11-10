@@ -193,6 +193,24 @@ cosign verify tamacat/zabbix-server-mysql:5.0.47-alpine-b20260926 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+### Reading a CI run: what changed, and how far the checks got
+
+Every run of `ci-release.yml` writes a **Job Summary** on its run page (Actions, then the run, then *Summary*), so
+the logs do not have to be opened:
+
+- **What changed since the previous build.** This run's SBOMs are compared with the previous run's on `main`:
+  package updates, additions and removals per image, and the Alpine point release.
+- **How far the vulnerability checks got.** Trivy counts per image and severity (only CRITICAL blocks; the
+  High findings that already have a fixed version are counted separately, as the ones worth acting on),
+  govulncheck on agent2, and the proxy and smoke tests. The Trivy vulnerability DB timestamp shows how fresh the
+  data was.
+- **Upstream.** The weekly `zabbix-version` job fails when upstream has a newer 5.0.x release than the one
+  imported (`ZABBIX_IMAGE_TAG` in `.env.example`, checked by `scripts/check-zabbix-version.sh`), and `php-version` does the same for PHP; each also adds a one-row table to the Summary. They
+  only notify: they do not block `verify` or `publish`.
+
+A scheduled run stays *waiting* until the `production` environment is approved. By then `verify` (every check
+above) has already finished; nothing is published until you approve.
+
 ### PHP in `zabbix-web` is built from source
 
 The `zabbix-web` image does not use Alpine's `php83` packages: PHP is compiled from the official tarball in
