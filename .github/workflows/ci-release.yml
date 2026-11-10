@@ -13,6 +13,14 @@
 # DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets.
 name: CI / Release
 
+# Makes scheduled and manual runs recognisable in the Actions list (otherwise every run is just "CI / Release").
+# push and pull_request evaluate to an empty string, so GitHub keeps its default title (the first line of the
+# commit message / the PR title). Using head_commit.message here would show a multi-line message in full.
+run-name: >-
+  ${{ github.event_name == 'schedule' && '定期の再ビルド・再スキャン(週次)'
+  || github.event_name == 'workflow_dispatch' && '手動の再ビルド・再スキャン'
+  || '' }}
+
 on:
   push:
     branches: [main]
@@ -92,10 +100,26 @@ jobs:
       - name: Compare the pinned PHP version with the latest release
         run: ./scripts/check-php-version.sh
 
+  zabbix-version:
+    # The Zabbix source is built here, so Trivy cannot judge vulnerabilities in Zabbix itself. This fails, on a
+    # schedule only (like php-version), when a newer 5.0.x release exists upstream than the one imported
+    # (ZABBIX_IMAGE_TAG in .env.example). It is a notice: it does not block verify or publish.
+    name: Zabbix upstream version check (scheduled)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare the imported Zabbix version with the upstream tags
+        run: ./scripts/check-zabbix-version.sh
+
   verify:
     name: Verify (tests, build, scan, smoke test)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read # fetch the previous SBOM, to show what changed since the last build in the Job Summary
     outputs:
       build_date: ${{ steps.vars.outputs.build_date }}
     steps:
@@ -122,18 +146,80 @@ jobs:
         id: vars
         run: echo "build_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
+      # Where scripts/security-scan.sh leaves what the Job Summary needs: per-image counts (JSON Lines) and
+      # the SBOMs that are compared with the previous build's. Display-only: neither affects any gate.
+      - name: Prepare the Job Summary inputs
+        run: |
+          echo "SCAN_SUMMARY_FILE=${RUNNER_TEMP}/ci-summary.jsonl" >> "$GITHUB_ENV"
+          echo "SBOM_DIR=${GITHUB_WORKSPACE}/sbom" >> "$GITHUB_ENV"
+
+      - name: Unit tests for the Job Summary script (tests/ci_summary)
+        run: python3 -m unittest discover -s tests/ci_summary -v
+
       # composer install + PHPUnit (blocking) -> compose build of all 4 images -> scripts/security-scan.sh
       # (full report, CRITICAL findings block).
       - name: Test, build and scan (scripts/ci-pipeline.sh)
+        id: pipeline
         run: ./scripts/ci-pipeline.sh
 
       # Needs no server: how the proxy's environment variables become its configuration, and that the
       # runtime-control commands work without -c as in the official images.
       - name: Proxy entrypoint and runtime-control tests (scripts/test-proxy-entrypoint.sh)
+        id: proxy_tests
         run: ./scripts/test-proxy-entrypoint.sh
 
       - name: Full-stack smoke test (scripts/smoke-test.sh)
+        id: smoke
         run: ./scripts/smoke-test.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sbom-${{ steps.vars.outputs.build_date }}
+          path: sbom/
+          if-no-files-found: ignore
+
+      # The most recent SBOM of main from before this run, to show what changed since the previous build.
+      # If there is none (first run, or expired) or it cannot be fetched, the summary says it cannot compare.
+      - name: Fetch the previous SBOM (for the Job Summary)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/sbom-prev"
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '
+            [.artifacts[]
+              | select(.name | startswith("sbom-"))
+              | select(.expired | not)
+              | select(.workflow_run.head_branch == "main")
+              | select((.workflow_run.id | tostring) != "'"${GITHUB_RUN_ID}"'")]
+            | sort_by(.created_at) | last | .id // empty')"
+          if [ -z "${artifact_id}" ]; then
+            echo "No previous SBOM found (first run, or expired)"
+            exit 0
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > "${RUNNER_TEMP}/sbom-prev.zip"
+          unzip -q -o "${RUNNER_TEMP}/sbom-prev.zip" -d "${RUNNER_TEMP}/sbom-prev"
+          echo "Previous SBOM (artifact ${artifact_id}):"
+          ls "${RUNNER_TEMP}/sbom-prev"
+
+      # What changed since the previous build, and how far the vulnerability checks got, on the run page.
+      - name: Write Job Summary
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 scripts/ci_summary.py render \
+            --records "${SCAN_SUMMARY_FILE}" \
+            --sbom-dir sbom \
+            --prev-sbom-dir "${RUNNER_TEMP}/sbom-prev" \
+            --zabbix-version "$(sed -n 's/^ZABBIX_IMAGE_TAG=\([0-9.]*\).*/\1/p' .env.example | head -n 1)" \
+            --event "${{ github.event_name }}" \
+            --build-date "${{ steps.vars.outputs.build_date }}" \
+            --step "PHPUnit・ビルド・Trivy・govulncheck=${{ steps.pipeline.outcome }}" \
+            --step "プロキシのテスト=${{ steps.proxy_tests.outcome }}" \
+            --step "スモークテスト=${{ steps.smoke.outcome }}" \
+            --trivy-db >> "${GITHUB_STEP_SUMMARY}"
 
   publish:
     # Runs after a push to main, on the weekly schedule and on manual dispatch — never for pull requests, so
@@ -181,3 +267,11 @@ jobs:
 
       - name: Push, sign and attach SBOM
         run: ./scripts/push-images.sh
+
+      - name: List the published images in the Job Summary
+        run: |
+          {
+            echo "## 公開したイメージ"
+            echo ""
+            sed 's/^/- `/; s/$/`/' scripts/.last-image-tag
+          } >> "${GITHUB_STEP_SUMMARY}"

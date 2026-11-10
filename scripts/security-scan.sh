@@ -52,6 +52,29 @@ fi
 
 overall_status=0
 
+# Inputs for the GitHub Actions Job Summary (scripts/ci_summary.py). Display-only: every failure here is
+# swallowed, so nothing in this function can change the scan result. The workflow's verify job sets
+# SCAN_SUMMARY_FILE (per-image counts, written as JSON Lines) and SBOM_DIR (CycloneDX SBOMs, used to show
+# what changed since the previous build); anywhere else both are unset and this does nothing.
+record_image() {
+  local image="$1" verdict="$2" report
+
+  if [ -n "${SCAN_SUMMARY_FILE:-}" ]; then
+    report="$(mktemp)"
+    if trivy image --severity CRITICAL,HIGH,MEDIUM,LOW --skip-db-update --format json --output "${report}" "${image}" >/dev/null 2>&1; then
+      python3 scripts/ci_summary.py record-trivy --input "${report}" --target "${image}" \
+        --verdict "${verdict}" --summary-file "${SCAN_SUMMARY_FILE}" || true
+    fi
+    rm -f "${report}"
+  fi
+
+  if [ -n "${SBOM_DIR:-}" ]; then
+    mkdir -p "${SBOM_DIR}" || true
+    trivy image --format cyclonedx --skip-db-update \
+      --output "${SBOM_DIR}/$(echo "${image}" | tr '/:' '__').cyclonedx.json" "${image}" >/dev/null 2>&1 || true
+  fi
+}
+
 for image in "${IMAGES[@]}"; do
   echo ""
   echo "=================================================================="
@@ -69,17 +92,26 @@ for image in "${IMAGES[@]}"; do
   trivy image --severity CRITICAL,HIGH,MEDIUM,LOW --skip-db-update "${image}"
 
   echo "--- Blocking gate (CRITICAL only; see quality-gates.md 'Gate 3') ---"
+  gate_verdict=Pass
   if ! trivy image --severity CRITICAL --exit-code 1 --skip-db-update "${image}"; then
     overall_status=1
+    gate_verdict=Fail
   fi
+  record_image "${image}" "${gate_verdict}"
 done
 
 echo ""
 echo "=================================================================="
 echo "Go vulnerability check (zabbix_agent2)"
 echo "=================================================================="
+go_verdict=Pass
 if ! ./scripts/govulncheck-scan.sh; then
   overall_status=1
+  go_verdict=Fail
+fi
+if [ -n "${SCAN_SUMMARY_FILE:-}" ]; then
+  python3 scripts/ci_summary.py record-step --name "govulncheck (zabbix_agent2)" --result "${go_verdict}" \
+    --summary-file "${SCAN_SUMMARY_FILE}" || true
 fi
 
 echo ""
