@@ -81,6 +81,7 @@ works.
 ./scripts/govulncheck-scan.sh   # just the Go vulnerability check of zabbix_agent2 (security-scan.sh runs it too)
 ./scripts/smoke-test.sh      # bring the stack up on the bundled dev-mysql and exercise web -> PHP 8 -> MySQL, and proxy -> server
 ./scripts/test-proxy-entrypoint.sh   # proxy env-variable handling and runtime-control commands (needs no server)
+./scripts/test-push-images.sh        # how push-images.sh moves the <X.Y>-latest series alias (needs no images or registry)
 ./scripts/ui-test.sh         # Web admin UI regression tests against a built, isolated stack (see below)
 ```
 
@@ -172,8 +173,8 @@ the latest CVE database — edit the cron to change that), and on manual dispatc
 | Job | What it does |
 |---|---|
 | `lint` | Advisory only: hadolint on the four Dockerfiles, shellcheck on the scripts. Never blocks. |
-| `verify` | `scripts/ci-pipeline.sh` (PHPUnit, build the 4 images, Trivy — CRITICAL findings block — and govulncheck on agent2 — a Go vulnerability with a published fix blocks), then `scripts/test-proxy-entrypoint.sh` and `scripts/smoke-test.sh`. |
-| `publish` | After approval on the `production` environment: rebuilds the images, re-scans exactly what is about to be pushed, pushes to Docker Hub (`scripts/build-images.sh` → `security-scan.sh` → `push-images.sh`), signs each image with cosign (keyless) and attaches a CycloneDX SBOM. Skipped for pull requests. |
+| `verify` | `scripts/ci-pipeline.sh` (PHPUnit, build the 4 images, Trivy — CRITICAL findings block — and govulncheck on agent2 — a Go vulnerability with a published fix blocks), then `scripts/test-proxy-entrypoint.sh` and `scripts/smoke-test.sh` (and, before the build, `scripts/test-push-images.sh`). |
+| `publish` | After approval on the `production` environment: rebuilds the images, re-scans exactly what is about to be pushed, pushes to Docker Hub (`scripts/build-images.sh` → `security-scan.sh` → `push-images.sh`), signs each image with cosign (keyless), attaches a CycloneDX SBOM, and then moves the `<X.Y>-latest` series tag to the new image. Skipped for pull requests. |
 
 Before `publish` can run, this repository's GitHub settings need a one-time setup (a workflow file
 cannot do it):
@@ -192,6 +193,9 @@ cosign verify tamacat/zabbix-server-mysql:5.0.47-alpine-b20260926 \
   --certificate-identity-regexp 'https://github.com/tamacat/zabbix-5.0-custom/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+`<X.Y>-latest` (see Docker Hub below) is the same image as the dated tag it was copied from, so the same
+command works with `tamacat/zabbix-server-mysql:5.0-latest`.
 
 ### Reading a CI run: what changed, and how far the checks got
 
@@ -244,6 +248,17 @@ specifically) — e.g.:
 
 ```bash
 podman pull tamacat/zabbix-server-mysql:5.0.47-alpine-b20260917
+```
+
+A dated tag never changes once published, so pin it (or its digest) when you need a reproducible deployment.
+
+`<X.Y>-latest` (for example `5.0-latest`) is a floating tag: in each of the four repositories it points at the
+newest published build of that series. `scripts/push-images.sh` moves it only after the image has been pushed,
+signed and had its SBOM attached (so only the GitHub Actions publish job moves it, never a local push), and it
+points at the very same image (the same digest) as the dated tag, so the signature and SBOM apply to it unchanged.
+
+```bash
+podman pull tamacat/zabbix-server-mysql:5.0-latest
 ```
 
 ## Layout

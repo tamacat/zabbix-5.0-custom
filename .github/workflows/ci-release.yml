@@ -156,6 +156,10 @@ jobs:
       - name: Unit tests for the Job Summary script (tests/ci_summary)
         run: python3 -m unittest discover -s tests/ci_summary -v
 
+      # Needs no images, registry or network: how push-images.sh moves the <X.Y>-latest series alias.
+      - name: Series alias tests for the publish script (scripts/test-push-images.sh)
+        run: ./scripts/test-push-images.sh
+
       # composer install + PHPUnit (blocking) -> compose build of all 4 images -> scripts/security-scan.sh
       # (full report, CRITICAL findings block).
       - name: Test, build and scan (scripts/ci-pipeline.sh)
@@ -274,4 +278,8 @@ jobs:
             echo "## 公開したイメージ"
             echo ""
             sed 's/^/- `/; s/$/`/' scripts/.last-image-tag
+            echo ""
+            echo "## 系列の最新タグ(上と同じイメージ)"
+            echo ""
+            sed -nE 's/^([^:]+):([0-9]+\.[0-9]+)\.[0-9]+-alpine-b[0-9]{8}$/- `\1:\2-latest`/p' scripts/.last-image-tag
           } >> "${GITHUB_STEP_SUMMARY}"

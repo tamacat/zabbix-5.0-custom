@@ -14,6 +14,12 @@
 # also signed keylessly (Sigstore, via the job's OIDC token) and gets a CycloneDX SBOM attached as a
 # cosign attestation, both against the registry digest that was just pushed. Anywhere else that step is
 # skipped, so a local push still works.
+#
+# After an image has been pushed, signed and attested, <repository>:<X.Y>-latest (e.g. 5.0-latest) is pointed at
+# the same image, in each repository. It is the one floating tag: the dated tag never changes, while the alias
+# moves to the newest published build of the series. It is only moved for an image that was signed and attested
+# (so, in practice, only by the GitHub Actions publish job), and it must end up with the same digest as the
+# dated tag, so the signature and the SBOM apply to it unchanged.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -24,8 +30,13 @@ if [ ! -s "${TAG_FILE}" ]; then
   exit 1
 fi
 
+# Set to 1 by sign_and_attest only when the image really was signed and its SBOM attached (it returns 0 as well
+# when it skips signing outside GitHub Actions), so the series alias is never moved for an unsigned image.
+signed=0
+
 sign_and_attest() {
   local image="$1" repo digests digest_ref sbom
+  signed=0
 
   if [ -z "${GITHUB_ACTIONS:-}" ] || ! command -v cosign >/dev/null 2>&1; then
     echo "  (skipping cosign signing: it only runs inside GitHub Actions, with cosign installed)"
@@ -53,6 +64,36 @@ sign_and_attest() {
   trivy image --format cyclonedx --output "${sbom}" "${image}"
   cosign attest --yes --type cyclonedx --predicate "${sbom}" "${digest_ref}"
   rm -f "${sbom}"
+  signed=1
+}
+
+# Point <repository>:<X.Y>-latest at the image that was just pushed (see the header). Only a
+# <X.Y.Z>-alpine-b<YYYYMMDD> release tag gets an alias.
+move_series_alias() {
+  local image="$1" repo tag alias count
+  repo="${image%%:*}"
+  tag="${image#*:}"
+
+  if [[ ! "${tag}" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+-alpine-b[0-9]{8}$ ]]; then
+    echo "  (no series alias for ${image}: not a <X.Y.Z>-alpine-b<date> release tag)"
+    return 0
+  fi
+  alias="${repo}:${BASH_REMATCH[1]}.${BASH_REMATCH[2]}-latest"
+
+  echo "--- series alias: ${alias} -> ${image} ---"
+  "${ENGINE}" tag "${image}" "${alias}"
+  "${ENGINE}" push "${alias}"
+
+  # One image, two tags: they must resolve to the same digest, or the signature would not cover the alias.
+  count="$("${ENGINE}" inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${image}" | grep -c "^${repo}@" || true)"
+  case "${count}" in
+    1) ;;
+    0) echo "!! WARNING: could not confirm that ${alias} has the same digest as ${image} (no RepoDigests)" >&2 ;;
+    *)
+      echo "!! ${alias} ended up with a different digest than ${image} (${count} digests): the signature does not cover it" >&2
+      return 1
+      ;;
+  esac
 }
 
 echo "About to push:"
@@ -66,6 +107,11 @@ while IFS= read -r image; do
   echo "=================================================================="
   "${ENGINE}" push "${image}"
   sign_and_attest "${image}"
+  if [ "${signed}" = 1 ]; then
+    move_series_alias "${image}"
+  else
+    echo "  (series alias not moved: ${image} was not signed and attested)"
+  fi
 done < "${TAG_FILE}"
 
 echo ""
