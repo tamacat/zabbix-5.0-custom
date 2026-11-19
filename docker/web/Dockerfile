@@ -14,10 +14,10 @@
 # Alpine packages provided and Zabbix needs, and nothing else (no curl, sodium, sqlite3, ...).
 
 # PHP version and SHA-256. To upgrade, take both from https://www.php.net/releases/index.php?json&version=8.3
-# (verified 2026-10-22). Trivy cannot see PHP's own vulnerabilities (this PHP is not an Alpine package), so
+# (verified 2026-11-20). Trivy cannot see PHP's own vulnerabilities (this PHP is not an Alpine package), so
 # scripts/check-php-version.sh and the scheduled CI run watch for a newer release.
-ARG PHP_VERSION=8.3.36
-ARG PHP_SHA256=dd54693aa334c5c4d72e9aee96b082c2473750a18a6c1d105789c93a3b1692fd
+ARG PHP_VERSION=8.3.37
+ARG PHP_SHA256=0237af84478b7a7649d3964153f1b8653d622550b846f56d63062de683fb86bb
 
 # ---------------------------------------------------------------------------------------
 # Build PHP (php-fpm and the CLI)
